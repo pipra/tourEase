@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Alert } from 'react-native';
+import { View, Text, StyleSheet, Alert, TouchableOpacity } from 'react-native';
 import { TextInput, Button, Card } from 'react-native-paper';
 import  {router} from 'expo-router';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
@@ -27,16 +27,16 @@ const SignupScreen = () => {
     try {
         await createUserWithEmailAndPassword(auth, email, password);
         const user = auth.currentUser;
-        console.log(user);
+        // console.log(user);
         if(user) {
             await setDoc(doc(db, "Users", user.uid), {
-            email: user.email,
+                email: user.email,
                 firstName: firstName,
                 lastName: lastName,
             });
         }
 
-        console.log("User Registered Successfully!!");
+        // console.log("User Registered Successfully!!");
         Alert.alert('User Registered Successfully!!');
         router.push('/');
     } catch(error) {
@@ -95,6 +95,15 @@ const SignupScreen = () => {
             <Button mode="contained" onPress={handleSignup} style={styles.button}>
                 Sign Up
             </Button>
+            <View style={styles.footer}>
+                <TouchableOpacity
+                onPress={() => router.push('/')}
+                className='flex flex-row items-center justify-center mt-10'
+                >
+                <Text className='text-lg'>Already have an account? </Text>
+                <Text className='text-lg font-bold text-[#6200EE]'>Sign In</Text>
+                </TouchableOpacity>
+            </View>
         </Card.Content>
       </Card>
     </View>

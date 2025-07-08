@@ -3,18 +3,27 @@ import { View, Text, StyleSheet, Alert, TouchableOpacity, ImageBackground } from
 import { TextInput, Button, Card } from 'react-native-paper';
 import '../global.css'
 import { router } from 'expo-router';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from './(auth)/firebase';
+import { white } from 'react-native-paper/lib/typescript/styles/themes/v2/colors';
 
 const LoginScreen = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleLogin = () => {
+  const handleLogin = async (e) => {
     if (!email || !password) {
-      Alert.alert('Error', 'Please fill in both fields');
+      Alert.alert('Error!', 'Please fill in both fields');
       return;
     }
-    Alert.alert('Logged In', `Welcome ${email}!`);
-    router.push('/home');
+
+    e.preventDefault();
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      router.push('/home');
+    } catch(error) {
+      Alert.alert('Error!', error.message);
+    }
   };
 
   return (
@@ -44,7 +53,7 @@ const LoginScreen = () => {
               mode="outlined"
               left={<TextInput.Icon name="lock" />}
             />
-            <Button mode="contained" onPress={handleLogin} style={styles.button}>
+            <Button style={styles.button} mode="contained" onPress={handleLogin} >
               Sign In
             </Button>
             <View style={styles.footer}>
@@ -96,8 +105,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
   },
   button: {
+    color: '#ffffff',
     marginTop: 10,
     borderRadius: 5,
+    fontWeight: 'bold',
     backgroundColor: '#6200EE',
   },
   footer: {
