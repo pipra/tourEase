@@ -8,7 +8,7 @@ const TabLayout = () => {
     useEffect(() => {
         const unsubscribe = auth.onAuthStateChanged((userr) => {
             if (!userr) {
-                router.push('/')
+                router.push('/');
                 console.log("There is no user:", userr);
             }
         });

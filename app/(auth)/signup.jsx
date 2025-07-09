@@ -39,7 +39,7 @@ const SignupScreen = () => {
                 });
             }
 
-            console.log(user);
+            // console.log(user);
             Alert.alert('User Registered Successfully!!');
             router.push('/');
         } catch (error) {
