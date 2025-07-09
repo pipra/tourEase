@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Alert, TouchableOpacity } from 'react-native';
-import { TextInput, Button, Card } from 'react-native-paper';
-import  {router} from 'expo-router';
+import { router } from 'expo-router';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth, db } from './firebase';
 import { doc, setDoc } from 'firebase/firestore';
+import React, { useState } from 'react';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Button, Card, TextInput } from 'react-native-paper';
+import { auth, db } from './firebase';
 
 const SignupScreen = () => {
   const [firstName, setFirstName] = useState('');
@@ -13,7 +13,7 @@ const SignupScreen = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
-  const handleSignup = async (e) => {
+  const handleSignup = async () => {
     if (!firstName || !lastName || !email || !password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
@@ -23,7 +23,6 @@ const SignupScreen = () => {
       return;
     }
     
-    e.preventDefault();
     try {
         await createUserWithEmailAndPassword(auth, email, password);
         const user = auth.currentUser;
@@ -38,7 +37,7 @@ const SignupScreen = () => {
 
         // console.log("User Registered Successfully!!");
         Alert.alert('User Registered Successfully!!');
-        router.push('/');
+        // The redirect will be handled by the _layout.tsx auth state listener
     } catch(error) {
         Alert.alert("Error!", error.message);
     }
@@ -55,7 +54,7 @@ const SignupScreen = () => {
                 onChangeText={setFirstName}
                 style={styles.input}
                 mode="outlined"
-                left={<TextInput.Icon name="account" />}
+                left={<TextInput.Icon icon="account" />}
             />
             <TextInput
                 label="Last Name"
@@ -63,7 +62,7 @@ const SignupScreen = () => {
                 onChangeText={setLastName}
                 style={styles.input}
                 mode="outlined"
-                left={<TextInput.Icon name="account" />}
+                left={<TextInput.Icon icon="account" />}
             />
             <TextInput
                 label="Email"
@@ -72,7 +71,7 @@ const SignupScreen = () => {
                 keyboardType="email-address"
                 style={styles.input}
                 mode="outlined"
-                left={<TextInput.Icon name="email" />}
+                left={<TextInput.Icon icon="email" />}
             />
             <TextInput
                 label="Password"
@@ -81,7 +80,7 @@ const SignupScreen = () => {
                 secureTextEntry
                 style={styles.input}
                 mode="outlined"
-                left={<TextInput.Icon name="lock" />}
+                left={<TextInput.Icon icon="lock" />}
             />
             <TextInput
                 label="Confirm Password"
@@ -90,7 +89,7 @@ const SignupScreen = () => {
                 secureTextEntry
                 style={styles.input}
                 mode="outlined"
-                left={<TextInput.Icon name="lock" />}
+                left={<TextInput.Icon icon="lock" />}
             />
             <Button mode="contained" onPress={handleSignup} style={styles.button}>
                 Sign Up

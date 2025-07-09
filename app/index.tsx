@@ -1,30 +1,30 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Alert, TouchableOpacity, ImageBackground } from 'react-native';
-import { TextInput, Button, Card } from 'react-native-paper';
-import '../global.css'
 import { router } from 'expo-router';
 import { signInWithEmailAndPassword } from 'firebase/auth';
+import React, { useState } from 'react';
+import { Alert, ImageBackground, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Button, Card, TextInput } from 'react-native-paper';
+import '../global.css';
 import { auth } from './(auth)/firebase';
-import { white } from 'react-native-paper/lib/typescript/styles/themes/v2/colors';
 
 const LoginScreen = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleLogin = async (e) => {
+  const handleLogin = async () => {
     if (!email || !password) {
       Alert.alert('Error!', 'Please fill in both fields');
       return;
     }
 
-    e.preventDefault();
     try {
       await signInWithEmailAndPassword(auth, email, password);
       router.push('/home');
-    } catch(error) {
-      Alert.alert('Error!', error.message);
+    } catch(error: any) {
+      Alert.alert('Error!', error.message || 'An error occurred during login');
     }
   };
+
+  
 
   return (
     <View style={styles.container}>
@@ -42,7 +42,7 @@ const LoginScreen = () => {
               keyboardType="email-address"
               style={styles.input}
               mode="outlined"
-              left={<TextInput.Icon name="email" />}
+              left={<TextInput.Icon icon="email" />}
             />
             <TextInput
               label="Password"
@@ -51,7 +51,7 @@ const LoginScreen = () => {
               secureTextEntry
               style={styles.input}
               mode="outlined"
-              left={<TextInput.Icon name="lock" />}
+              left={<TextInput.Icon icon="lock" />}
             />
             <Button style={styles.button} mode="contained" onPress={handleLogin} >
               Sign In
