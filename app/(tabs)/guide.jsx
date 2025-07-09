@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FlatList, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlatList, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 const guides = [
@@ -18,45 +18,47 @@ const Guide = () => {
     );
 
     return (
-        <>
-            <SafeAreaView>
-                <Text style={styles.header}>GuideBook</Text>
-                <TextInput
-                    style={styles.searchInput}
-                    placeholder="Search guides by name..."
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                />
-            </SafeAreaView>
+        <SafeAreaView style={styles.container}>
+            <Text style={styles.header}>GuideBook</Text>
+            <TextInput
+                style={styles.searchInput}
+                placeholder="Search guides by name..."
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+            />
             <Text style={styles.availableGuides}>Available Guides</Text>
-            <ScrollView style={styles.container}>
-                <FlatList
-                    data={filteredGuides}
-                    keyExtractor={(item) => item.name}
-                    renderItem={({ item }) => (
-                        <View style={styles.card}>
-                            <Image
-                                style={styles.image}
-                                source={require('../../assets/images/habib.jpg')}
-                            />
-                            <View style={styles.details}>
-                                <Text style={styles.name}>{item.name}</Text>
-                                <Text style={styles.location}>{item.location}</Text>
-                                <Text style={styles.rating}>Rating: {item.rating} ({item.reviews} reviews)</Text>
-                                <Text style={styles.price}>BDT {item.price}/day</Text>
-                            </View>
-                            <TouchableOpacity style={styles.bookButton} onPress={() => alert('Booked')}>
-                                <Text style={styles.bookText}>Book</Text>
-                            </TouchableOpacity>
+            <FlatList
+                data={filteredGuides}
+                keyExtractor={(item) => item.name}
+                renderItem={({ item }) => (
+                    <View style={styles.card}>
+                        <Image
+                            style={styles.image}
+                            source={require('../../assets/images/habib.jpg')}
+                        />
+                        <View style={styles.details}>
+                            <Text style={styles.name}>{item.name}</Text>
+                            <Text style={styles.location}>{item.location}</Text>
+                            <Text style={styles.rating}>Rating: {item.rating} ({item.reviews} reviews)</Text>
+                            <Text style={styles.price}>BDT {item.price}/day</Text>
                         </View>
-                    )}
-                />
-            </ScrollView>
-        </>
+                        <TouchableOpacity style={styles.bookButton} onPress={() => alert('Booked')}>
+                            <Text style={styles.bookText}>Book</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+                contentContainerStyle={styles.listContainer}
+            />
+        </SafeAreaView>
     )
 }
 
 const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: '#f8f8f8',
+        // marginBottom: 10,
+    },
     header: {
         marginTop: 10,
         fontSize: 24,
@@ -89,6 +91,9 @@ const styles = StyleSheet.create({
         marginVertical: 20,
         marginHorizontal: 15,
         color: '#333',
+    },
+    listContainer: {
+        paddingHorizontal: 15,
     },
     card: {
         flexDirection: 'row',
