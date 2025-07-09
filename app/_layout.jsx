@@ -5,6 +5,7 @@ import { auth } from "./(auth)/firebase";
 export default function RootLayout() {
     useEffect(() => {
         const unsubscribe = auth.onAuthStateChanged((userr) => {
+            router.push('/home');
             if (userr) {
                 router.push("/home");
                 // console.log('User is signed in:', userr);
