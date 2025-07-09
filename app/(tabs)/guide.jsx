@@ -1,54 +1,113 @@
-import { useState } from 'react';
-import { FlatList, Image, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { collection, getDocs, query } from 'firebase/firestore';
+import { ActivityIndicator, FlatList, Image, Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-const guides = [
-    { name: 'Habibur Rahman', location: 'Rajshahi University Campus', rating: 4.9, reviews: 151, price: 5000 },
-    { name: 'Majnu Miah', location: 'Tangail', rating: 4.9, reviews: 95, price: 5000 },
-    { name: 'Ifran Khan', location: 'Dhaka City Tours', rating: 4.9, reviews: 150, price: 5000 },
-    { name: 'Nusrat Jahan', location: 'Cox\'s Bazar Beaches', rating: 4.6, reviews: 80, price: 1800 },
-    { name: 'Rashed Miah', location: 'Chittagong Port', rating: 4.5, reviews: 50, price: 2500 },
-];
+import { db } from '../(auth)/firebase';
 
 const Guide = () => {
+    const [guides, setGuides] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
+    const [isModalVisible, setIsModalVisible] = useState(false);
+    const [selectedGuide, setSelectedGuide] = useState(null);
 
     const filteredGuides = guides.filter(guide =>
-        guide.name.toLowerCase().includes(searchQuery.toLowerCase())
+        guide.location.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+    const getGuides = async () => {
+        const q = query(collection(db, "guides"));
+        const res = await getDocs(q);
+        
+        const guidesData = [];
+        res.forEach((item) => {
+            guidesData.push(item.data());
+        });
+        setGuides(guidesData);
+    };
+
+    useEffect(() => {
+        getGuides();
+    }, []);
+
+    const handleBookButtonClick = (guide) => {
+        setSelectedGuide(guide);
+        setIsModalVisible(true);
+    };
+
+    const handleCloseModal = () => {
+        setIsModalVisible(false);
+    };
 
     return (
         <SafeAreaView style={styles.container}>
             <Text style={styles.header}>GuideBook</Text>
             <TextInput
                 style={styles.searchInput}
-                placeholder="Search guides by name..."
+                placeholder="Search guides by location..."
                 value={searchQuery}
                 onChangeText={setSearchQuery}
             />
             <Text style={styles.availableGuides}>Available Guides</Text>
-            <FlatList
-                data={filteredGuides}
-                keyExtractor={(item) => item.name}
-                renderItem={({ item }) => (
-                    <View style={styles.card}>
-                        <Image
-                            style={styles.image}
-                            source={require('../../assets/images/habib.jpg')}
-                        />
-                        <View style={styles.details}>
-                            <Text style={styles.name}>{item.name}</Text>
-                            <Text style={styles.location}>{item.location}</Text>
-                            <Text style={styles.rating}>Rating: {item.rating} ({item.reviews} reviews)</Text>
-                            <Text style={styles.price}>BDT {item.price}/day</Text>
-                        </View>
-                        <TouchableOpacity style={styles.bookButton} onPress={() => alert('Booked')}>
-                            <Text style={styles.bookText}>Book</Text>
-                        </TouchableOpacity>
+            {
+                guides.length > 0 ? ( 
+                    <FlatList
+                        data={filteredGuides}
+                        keyExtractor={(item) => item.name}
+                        renderItem={({ item }) => (
+                            <TouchableOpacity 
+                                style={{color: '#333'}}
+                            >
+                                <View style={styles.card}>
+                                    <Image
+                                        style={styles.image}
+                                        source={{ uri: item.image }}
+                                    />
+                                    <View style={styles.details}>
+                                        <Text style={styles.name}>{item.name}</Text>
+                                        <Text style={styles.location}>{item.location}</Text>
+                                        <Text style={styles.rating}>Rating: {item.rating} ({item.reviews} reviews)</Text>
+                                        <Text style={styles.price}>BDT {item.price}/day</Text>
+                                    </View>
+                                    <TouchableOpacity style={styles.bookButton} onPress={() => handleBookButtonClick(item)}>
+                                        <Text style={styles.bookText}>Book</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </TouchableOpacity>
+                        )}
+                        contentContainerStyle={styles.listContainer}
+                    />
+                ) : (
+                    <View style={styles.loadingContainer}>
+                        <ActivityIndicator size="large" color="#fb9b33" />
+                        <Text style={styles.loadingText}>Loading guides...</Text>
                     </View>
-                )}
-                contentContainerStyle={styles.listContainer}
-            />
+                )
+            }
+
+            
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={isModalVisible}
+                onRequestClose={handleCloseModal}
+            >
+                <View style={styles.modalContainer}>
+                    <View style={styles.modalContent}>
+                        <Text style={styles.modalHeader}>Confirm Payment</Text>
+                        <Text style={styles.bookingDetails}>
+                            Booking {selectedGuide?.name} for BDT {selectedGuide?.price}
+                        </Text>
+                        <View style={styles.buttonContainer}>
+                            <TouchableOpacity style={styles.payButton}>
+                                <Text style={styles.payButtonText}>Confirm Request</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.cancelButton} onPress={handleCloseModal}>
+                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     )
 }
@@ -57,7 +116,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#f8f8f8',
-        // marginBottom: 10,
     },
     header: {
         marginTop: 10,
@@ -76,24 +134,27 @@ const styles = StyleSheet.create({
         paddingLeft: 10,
         fontSize: 16,
         backgroundColor: '#fff',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
-        elevation: 5,
-        marginTop: 10,
-        width: '90%',
     },
     availableGuides: {
         fontSize: 20,
         fontWeight: 'bold',
         textAlign: 'center',
         marginVertical: 20,
-        marginHorizontal: 15,
         color: '#333',
     },
     listContainer: {
         paddingHorizontal: 15,
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginTop: 50,
+    },
+    loadingText: {
+        marginTop: 10,
+        fontSize: 16,
+        color: '#666',
     },
     card: {
         flexDirection: 'row',
@@ -135,14 +196,70 @@ const styles = StyleSheet.create({
     bookButton: {
         backgroundColor: '#28a745',
         padding: 6,
-        marginTop: 80,
-        marginBottom: 80,
         paddingHorizontal: 15,
         borderRadius: 5,
         justifyContent: 'center',
         alignItems: 'center',
     },
     bookText: {
+        color: '#fff',
+        fontWeight: 'bold',
+    },
+    modalContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    },
+    modalContent: {
+        backgroundColor: '#fff',
+        padding: 20,
+        borderRadius: 10,
+        width: '80%',
+    },
+    modalHeader: {
+        fontSize: 22,
+        fontWeight: 'bold',
+        marginBottom: 10,
+        color: '6200EE',
+    },
+    bookingDetails: {
+        fontSize: 18,
+        marginBottom: 20,
+    },
+    input: {
+        height: 40,
+        borderColor: '#ddd',
+        borderWidth: 1,
+        borderRadius: 5,
+        marginBottom: 15,
+        paddingLeft: 10,
+    },
+    row: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+    },
+    buttonContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+    },
+    payButton: {
+        backgroundColor: '#28a745',
+        paddingVertical: 10,
+        paddingHorizontal: 30,
+        borderRadius: 5,
+    },
+    payButtonText: {
+        color: '#fff',
+        fontWeight: 'bold',
+    },
+    cancelButton: {
+        backgroundColor: '#dc3545',
+        paddingVertical: 10,
+        paddingHorizontal: 30,
+        borderRadius: 5,
+    },
+    cancelButtonText: {
         color: '#fff',
         fontWeight: 'bold',
     },

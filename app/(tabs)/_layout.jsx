@@ -9,7 +9,7 @@ const TabLayout = () => {
         const unsubscribe = auth.onAuthStateChanged((userr) => {
             if (!userr) {
                 router.push('/')
-                // console.log("There is no user:", userr);
+                console.log("There is no user:", userr);
             }
         });
         return () => unsubscribe();

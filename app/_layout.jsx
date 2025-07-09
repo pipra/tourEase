@@ -8,7 +8,7 @@ export default function RootLayout() {
             // router.push('/home');
             if (userr) {
                 router.push("/home");
-                // console.log('User is signed in:', userr);
+                console.log('User is signed in:', userr);
             }
         });
         return () => unsubscribe();
