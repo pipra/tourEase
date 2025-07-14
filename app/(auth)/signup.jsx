@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Button, Card, TextInput } from 'react-native-paper';
 import { auth, db } from './firebase';
@@ -27,7 +27,6 @@ const SignupScreen = () => {
         try {
             await createUserWithEmailAndPassword(auth, email, password);
             const user = auth.currentUser;
-            // console.log(user);
             if (user) {
                 await updateProfile(user, {
                     displayName: `${firstName} ${lastName}`,
@@ -36,6 +35,8 @@ const SignupScreen = () => {
                     email: user.email,
                     firstName: firstName,
                     lastName: lastName,
+                    userType: 'user',
+                    createdAt: new Date(),
                 });
             }
 
