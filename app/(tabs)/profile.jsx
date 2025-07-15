@@ -1,3 +1,4 @@
+import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { addDoc, collection, doc, getDoc, getDocs, query, updateDoc, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
@@ -25,6 +26,9 @@ export default function Profile() {
     const [selectedBooking, setSelectedBooking] = useState(null);
     const [reviewText, setReviewText] = useState('');
     const [reviewRating, setReviewRating] = useState(1);
+    const [editProfileModalVisible, setEditProfileModalVisible] = useState(false);
+    const [editedUserData, setEditedUserData] = useState({});
+    const [profileImageUri, setProfileImageUri] = useState(null);
 
     useEffect(() => {
         fetchUserDetails();
@@ -79,6 +83,55 @@ export default function Profile() {
                     bookingData.hasReview = reviewedBookingIds.has(doc.id);
                     bookingsData.push(bookingData);
                 });
+                
+                // Sort bookings with custom priority logic
+                bookingsData.sort((a, b) => {
+                    const currentDate = new Date();
+                    const dateA = a.date ? new Date(a.date) : new Date(0);
+                    const dateB = b.date ? new Date(b.date) : new Date(0);
+                    
+                    // Normalize status values (handle case variations and defaults)
+                    const statusA = (a.status || 'pending').toLowerCase().trim();
+                    const statusB = (b.status || 'pending').toLowerCase().trim();
+                    
+                    // Status priority: pending > confirmed > cancelled
+                    const statusPriority = {
+                        'pending': 1,
+                        'confirmed': 2,
+                        'cancelled': 3
+                    };
+                    
+                    const priorityA = statusPriority[statusA] || 2;
+                    const priorityB = statusPriority[statusB] || 2;
+                    
+                    // Debug logging to see what's happening
+                    console.log(`Comparing: ${a.guideName} (${statusA}, priority: ${priorityA}) vs ${b.guideName} (${statusB}, priority: ${priorityB})`);
+                    
+                    // If different status priorities, sort by status (lower number = higher priority)
+                    if (priorityA !== priorityB) {
+                        return priorityA - priorityB;
+                    }
+                    
+                    // For confirmed bookings, prioritize future dates over past dates
+                    if (statusA === 'confirmed' && statusB === 'confirmed') {
+                        const aIsFuture = dateA >= currentDate;
+                        const bIsFuture = dateB >= currentDate;
+                        
+                        // Both future or both past - sort by date (latest first)
+                        if (aIsFuture === bIsFuture) {
+                            return dateB.getTime() - dateA.getTime();
+                        }
+                        
+                        // Future dates come before past dates
+                        return bIsFuture ? 1 : -1;
+                    }
+                    
+                    // For same status (pending or cancelled), sort by date (latest first)
+                    return dateB.getTime() - dateA.getTime();
+                });
+                
+                // Debug: Log the final sorted order
+                console.log('Final sorted bookings:', bookingsData.map(b => `${b.guideName} - ${b.status} - ${b.date}`));
                 
                 setBookings(bookingsData);
             } catch (err) {
@@ -148,6 +201,14 @@ export default function Profile() {
             // Check if booking is confirmed
             if (selectedBooking.status !== 'confirmed') {
                 Alert.alert('Error', 'You can only review confirmed bookings');
+                return;
+            }
+
+            // Check if tour date has completed
+            const tourDate = new Date(selectedBooking.date);
+            const currentDate = new Date();
+            if (tourDate >= currentDate) {
+                Alert.alert('Tour Not Completed', 'You can only add a review after the tour date has passed. Please wait until after the tour is completed.');
                 return;
             }
 
@@ -229,6 +290,78 @@ export default function Profile() {
         }
     };
 
+    const pickImage = async () => {
+        try {
+            // Request permission to access media library
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission required', 'Sorry, we need camera roll permissions to change your profile picture.');
+                return;
+            }
+
+            // Launch image picker
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: true,
+                aspect: [1, 1],
+                quality: 0.7,
+            });
+
+            if (!result.canceled && result.assets[0]) {
+                setProfileImageUri(result.assets[0].uri);
+            }
+        } catch (error) {
+            Alert.alert('Error', 'Failed to pick image. Please try again.');
+            console.log('Error picking image:', error);
+        }
+    };
+
+    const handleEditProfile = () => {
+        setEditedUserData({
+            displayName: auth.currentUser?.displayName || '',
+            location: userData?.location || '',
+            service: userData?.service || 'Tourist',
+        });
+        setProfileImageUri(null);
+        setEditProfileModalVisible(true);
+    };
+
+    const saveProfile = async () => {
+        try {
+            const user = auth.currentUser;
+            if (!user) return;
+
+            // Update user document in Firestore
+            const userRef = doc(db, "Users", user.uid);
+            const updateData = {
+                location: editedUserData.location,
+                service: editedUserData.service,
+            };
+
+            // If a new image was selected, you would typically upload it to Firebase Storage
+            // and then save the download URL. For now, we'll save the local URI for demo purposes
+            if (profileImageUri) {
+                updateData.profileImageUrl = profileImageUri;
+            }
+
+            await updateDoc(userRef, updateData);
+
+            // Update display name in Firebase Auth if changed
+            if (editedUserData.displayName !== auth.currentUser?.displayName) {
+                await user.updateProfile({
+                    displayName: editedUserData.displayName
+                });
+            }
+
+            Alert.alert('Success', 'Profile updated successfully!');
+            setEditProfileModalVisible(false);
+            fetchUserDetails(); // Refresh user data
+        } catch (error) {
+            Alert.alert('Error', 'Failed to update profile. Please try again.');
+            console.log('Error updating profile:', error);
+        }
+    };
+
     const getStatusStyle = (status) => {
         switch (status) {
             case 'confirmed':
@@ -243,29 +376,51 @@ export default function Profile() {
     };
 
     const renderBookingItem = ({ item }) => {
-        const statusStyle = getStatusStyle(item.status);
-        
         return (
             <View style={styles.bookingCard}>
                 <View style={styles.bookingHeader}>
                     <View style={styles.bookingTitleContainer}>
                         <Text style={styles.bookingGuideName}>{item.guideName}</Text>
-                        {item.hasReview && (
-                            <Text style={styles.reviewBadge}>★ Reviewed</Text>
-                        )}
+                        <View style={styles.badgeContainer}>
+                            {item.hasReview && (
+                                <Text style={styles.reviewBadge}>★ Reviewed</Text>
+                            )}
+                            <Text style={[styles.statusBadgeText, getStatusStyle(item.status)]}>
+                                {(item.status || 'pending').toUpperCase()}
+                            </Text>
+                        </View>
                     </View>
                     <View style={[styles.bookingStatus, { 
-                        backgroundColor: statusStyle.backgroundColor,
-                        borderColor: statusStyle.borderColor,
+                        backgroundColor: getStatusStyle(item.status).backgroundColor,
+                        borderColor: getStatusStyle(item.status).borderColor,
                     }]}>
-                        <Text style={[styles.bookingStatusText, { color: statusStyle.color }]}>
+                        <Text style={[styles.bookingStatusText, { color: getStatusStyle(item.status).color }]}>
                             {item.status || 'Pending'}
                         </Text>
                     </View>
                 </View>
                 <Text style={styles.bookingLocation}>📍 {item.location}</Text>
                 <Text style={styles.bookingDate}>📅 {item.date || 'Date TBD'}</Text>
-                <Text style={styles.bookingPrice}>💰 ৳{item.price}/day</Text>
+                
+                {/* Enhanced pricing information */}
+                <View style={styles.pricingContainer}>
+                    <View style={styles.pricingRow}>
+                        <Text style={styles.pricingLabel}>💰 Daily Rate:</Text>
+                        <Text style={styles.pricingValue}>৳{item.price || item.pricePerDay || 'N/A'}</Text>
+                    </View>
+                    {item.guests && item.price && (
+                        <View style={styles.pricingRow}>
+                            <Text style={styles.pricingLabel}>👥 Guests:</Text>
+                            <Text style={styles.pricingValue}>{item.guests} people</Text>
+                        </View>
+                    )}
+                    {item.totalPrice && (
+                        <View style={styles.pricingRow}>
+                            <Text style={styles.totalPriceLabel}>� Total Amount:</Text>
+                            <Text style={styles.totalPriceValue}>৳{item.totalPrice}</Text>
+                        </View>
+                    )}
+                </View>
                 
                 <View style={styles.bookingActions}>
                     {item.status === 'confirmed' ? (
@@ -273,22 +428,35 @@ export default function Profile() {
                             <View style={styles.reviewedInfo}>
                                 <Text style={styles.reviewedText}>✓ Already Reviewed</Text>
                             </View>
-                        ) : (
-                            <TouchableOpacity 
-                                style={styles.reviewButton}
-                                onPress={() => {
-                                    // Double-check if booking has been reviewed
-                                    if (item.hasReview) {
-                                        Alert.alert('Info', 'You have already reviewed this booking');
-                                        return;
-                                    }
-                                    setSelectedBooking(item);
-                                    setReviewModalVisible(true);
-                                }}
-                            >
-                                <Text style={styles.reviewButtonText}>Add Review</Text>
-                            </TouchableOpacity>
-                        )
+                        ) : (() => {
+                            // Check if tour date has passed
+                            const tourDate = new Date(item.date);
+                            const currentDate = new Date();
+                            const tourCompleted = tourDate < currentDate;
+                            
+                            return tourCompleted ? (
+                                <TouchableOpacity 
+                                    style={styles.reviewButton}
+                                    onPress={() => {
+                                        // Double-check if booking has been reviewed
+                                        if (item.hasReview) {
+                                            Alert.alert('Info', 'You have already reviewed this booking');
+                                            return;
+                                        }
+                                        setSelectedBooking(item);
+                                        setReviewModalVisible(true);
+                                    }}
+                                >
+                                    <Text style={styles.reviewButtonText}>Add Review</Text>
+                                </TouchableOpacity>
+                            ) : (
+                                <View style={styles.statusInfo}>
+                                    <Text style={styles.statusText}>
+                                        Review available after tour completion ({item.date})
+                                    </Text>
+                                </View>
+                            );
+                        })()
                     ) : (
                         <View style={styles.statusInfo}>
                             <Text style={styles.statusText}>
@@ -358,7 +526,9 @@ export default function Profile() {
                         <View style={styles.profileCard}>
                             <View style={styles.profileImageContainer}>
                                 <Image
-                                    source={require('../../assets/images/habib.jpg')}
+                                    source={profileImageUri ? { uri: profileImageUri } : 
+                                           userData?.profileImageUrl ? { uri: userData.profileImageUrl } :
+                                           require('../../assets/images/habib.jpg')}
                                     style={styles.profileImage}
                                 />
                                 <Text style={styles.profileName}>
@@ -392,29 +562,25 @@ export default function Profile() {
                                 <Text style={styles.statNumber}>{reviews.length}</Text>
                                 <Text style={styles.statLabel}>Reviews</Text>
                             </View>
-                            <View style={styles.statCard}>
-                                <Text style={styles.statNumber}>4.5</Text>
-                                <Text style={styles.statLabel}>Rating</Text>
-                            </View>
                         </View>
 
                         {/* Profile Actions */}
-                        {/* <View style={styles.profileActions}>
-                            <TouchableOpacity style={styles.actionButton}>
+                        <View style={styles.profileActions}>
+                            <TouchableOpacity style={styles.actionButton} onPress={handleEditProfile}>
                                 <Text style={styles.actionIcon}>✏️</Text>
                                 <Text style={styles.actionText}>Edit Profile</Text>
                             </TouchableOpacity>
                             
-                            <TouchableOpacity style={styles.actionButton}>
+                            {/* <TouchableOpacity style={styles.actionButton}>
                                 <Text style={styles.actionIcon}>⚙️</Text>
                                 <Text style={styles.actionText}>Settings</Text>
-                            </TouchableOpacity>
+                            </TouchableOpacity> */}
                             
-                            <TouchableOpacity style={styles.actionButton}>
+                            {/* <TouchableOpacity style={styles.actionButton}>
                                 <Text style={styles.actionIcon}>❓</Text>
                                 <Text style={styles.actionText}>Help & Support</Text>
-                            </TouchableOpacity>
-                        </View> */}
+                            </TouchableOpacity> */}
+                        </View>
 
                         {/* Logout Section */}
                         <View style={styles.logoutSection}>
@@ -565,6 +731,72 @@ export default function Profile() {
                             </View>
                         </View>
                     </Modal>
+
+                    {/* Edit Profile Modal */}
+                    <Modal
+                        visible={editProfileModalVisible}
+                        animationType="slide"
+                        transparent={true}
+                        onRequestClose={() => setEditProfileModalVisible(false)}
+                    >
+                        <View style={styles.modalOverlay}>
+                            <View style={styles.modalContent}>
+                                <Text style={styles.modalTitle}>Edit Profile</Text>
+                                
+                                <View style={styles.imagePickerContainer}>
+                                    <TouchableOpacity 
+                                        style={styles.imagePickerButton}
+                                        onPress={pickImage}
+                                    >
+                                        {profileImageUri ? (
+                                            <Image
+                                                source={{ uri: profileImageUri }}
+                                                style={styles.pickedImage}
+                                            />
+                                        ) : (
+                                            <Text style={styles.imagePickerText}>📸 Pick an image</Text>
+                                        )}
+                                    </TouchableOpacity>
+                                </View>
+                                
+                                {/* <TextInput
+                                    style={styles.editInput}
+                                    placeholder="Display Name"
+                                    value={editedUserData.displayName}
+                                    onChangeText={(text) => setEditedUserData({ ...editedUserData, displayName: text })}
+                                /> */}
+                                
+                                <TextInput
+                                    style={styles.editInput}
+                                    placeholder="Location"
+                                    value={editedUserData.location}
+                                    onChangeText={(text) => setEditedUserData({ ...editedUserData, location: text })}
+                                />
+                                
+                                {/* <TextInput
+                                    style={styles.editInput}
+                                    placeholder="Service"
+                                    value={editedUserData.service}
+                                    onChangeText={(text) => setEditedUserData({ ...editedUserData, service: text })}
+                                /> */}
+                                
+                                <View style={styles.modalButtons}>
+                                    <TouchableOpacity
+                                        style={styles.cancelButton}
+                                        onPress={() => setEditProfileModalVisible(false)}
+                                    >
+                                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.submitButton}
+                                        onPress={saveProfile}
+                                    >
+                                        <Text style={styles.submitButtonText}>Save Changes</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </View>
+                    </Modal>
                 </>
             ) : (
                 <View style={styles.loadingContainer}>
@@ -708,7 +940,8 @@ const styles = StyleSheet.create({
     },
     statsContainer: {
         flexDirection: 'row',
-        justifyContent: 'space-around',
+        justifyContent: 'center',
+        gap: 30,
         width: '100%',
     },
     statCard: {
@@ -775,6 +1008,20 @@ const styles = StyleSheet.create({
         color: '#FFB000',
         fontWeight: '600',
         marginTop: 2,
+        marginRight: 8,
+    },
+    badgeContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+    },
+    statusBadgeText: {
+        fontSize: 9,
+        fontWeight: 'bold',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 8,
+        overflow: 'hidden',
     },
     bookingStatus: {
         paddingHorizontal: 8,
@@ -802,6 +1049,42 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#6200EE',
         marginBottom: 12,
+    },
+    pricingContainer: {
+        backgroundColor: '#F8F9FA',
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 12,
+        borderLeftWidth: 3,
+        borderLeftColor: '#4CAF50',
+    },
+    pricingRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 6,
+    },
+    pricingLabel: {
+        fontSize: 14,
+        color: '#666',
+        fontWeight: '500',
+    },
+    pricingValue: {
+        fontSize: 14,
+        color: '#333',
+        fontWeight: '600',
+    },
+    totalPriceLabel: {
+        fontSize: 14,
+        color: '#333',
+        fontWeight: '600',
+        marginTop: 4,
+    },
+    totalPriceValue: {
+        fontSize: 16,
+        color: '#4CAF50',
+        fontWeight: 'bold',
+        marginTop: 4,
     },
     bookingActions: {
         alignItems: 'flex-end',
@@ -1056,7 +1339,7 @@ const styles = StyleSheet.create({
     },
     logoutSection: {
         width: '100%',
-        marginTop: 10,
+        // marginTop: 10,
     },
     logoutCardButton: {
         flexDirection: 'row',
@@ -1066,7 +1349,7 @@ const styles = StyleSheet.create({
         padding: 16,
         borderWidth: 1,
         borderColor: '#FFE5E5',
-        marginTop: 50,
+        // marginTop: 50,
     },
     logoutIcon: {
         fontSize: 20,
@@ -1083,5 +1366,39 @@ const styles = StyleSheet.create({
         fontSize: 18,
         color: '#E53E3E',
         fontWeight: 'bold',
+    },
+    imagePickerContainer: {
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    imagePickerButton: {
+        borderWidth: 1,
+        borderColor: '#ddd',
+        borderRadius: 8,
+        padding: 12,
+        width: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: 120,
+        marginBottom: 15,
+    },
+    imagePickerText: {
+        color: '#666',
+        fontWeight: '600',
+        textAlign: 'center',
+    },
+    pickedImage: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 8,
+    },
+    editInput: {
+        borderWidth: 1,
+        borderColor: '#ddd',
+        borderRadius: 8,
+        padding: 12,
+        fontSize: 16,
+        marginBottom: 15,
+        width: '100%',
     },
 });

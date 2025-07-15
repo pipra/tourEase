@@ -42,7 +42,7 @@ const SignupScreen = () => {
 
             // console.log(user);
             Alert.alert('User Registered Successfully!!');
-            router.push('/');
+            router.push('/login');
         } catch (error) {
             Alert.alert("Error!", error.message);
         }
@@ -101,7 +101,7 @@ const SignupScreen = () => {
                     </Button>
                     <View style={styles.footer}>
                         <TouchableOpacity
-                            onPress={() => router.push('/')}
+                            onPress={() => router.push('/login')}
                             className='flex flex-row items-center justify-center mt-10'
                         >
                             <Text className='text-lg'>Already have an account? </Text>

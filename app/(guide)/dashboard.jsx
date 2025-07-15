@@ -73,7 +73,22 @@ const GuideDashboard = () => {
                 }))
                 .filter(booking => 
                     booking.guideId === user.uid || booking.guideId === guideDocId
-                );
+                )
+                .sort((a, b) => {
+                    // Sort by creation date first (latest first), then by booking date
+                    const dateA = a.createdAt ? new Date(a.createdAt.seconds * 1000) : new Date(0);
+                    const dateB = b.createdAt ? new Date(b.createdAt.seconds * 1000) : new Date(0);
+                    
+                    // If creation dates are different, sort by creation date (latest first)
+                    if (dateA.getTime() !== dateB.getTime()) {
+                        return dateB.getTime() - dateA.getTime();
+                    }
+                    
+                    // If creation dates are same or missing, sort by booking date (latest first)
+                    const bookingDateA = a.date ? new Date(a.date) : new Date(0);
+                    const bookingDateB = b.date ? new Date(b.date) : new Date(0);
+                    return bookingDateB.getTime() - bookingDateA.getTime();
+                });
             setBookings(bookingsData);
 
             // Calculate stats directly here
