@@ -1,7 +1,8 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { addDoc, collection, doc, getDoc, getDocs, query, updateDoc, where } from 'firebase/firestore';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
     Alert,
     FlatList,
@@ -22,6 +23,7 @@ export default function Profile() {
     const [bookings, setBookings] = useState([]);
     const [reviews, setReviews] = useState([]);
     const [activeTab, setActiveTab] = useState('profile');
+    const [bookingFilter, setBookingFilter] = useState('pending');
     const [reviewModalVisible, setReviewModalVisible] = useState(false);
     const [selectedBooking, setSelectedBooking] = useState(null);
     const [reviewText, setReviewText] = useState('');
@@ -35,6 +37,13 @@ export default function Profile() {
         fetchUserBookings();
         fetchUserReviews();
     }, []);
+
+    // Refresh data when the screen comes into focus (e.g., after booking a guide)
+    useFocusEffect(
+        useCallback(() => {
+            fetchUserBookings();
+        }, [])
+    );
 
     const fetchUserDetails = async () => {
         const user = auth.currentUser;
@@ -81,57 +90,32 @@ export default function Profile() {
                 querySnapshot.forEach((doc) => {
                     const bookingData = { id: doc.id, ...doc.data() };
                     bookingData.hasReview = reviewedBookingIds.has(doc.id);
+                    
+                    // Categorize booking based on status and date
+                    const currentDate = new Date();
+                    const bookingDate = bookingData.date ? new Date(bookingData.date) : null;
+                    const status = (bookingData.status || 'pending').toLowerCase().trim();
+                    
+                    // Determine category
+                    if (status === 'confirmed' && bookingDate && bookingDate < currentDate) {
+                        bookingData.category = 'history';
+                    } else if (status === 'confirmed' || status === 'accepted') {
+                        bookingData.category = 'accepted';
+                    } else if (status === 'cancelled') {
+                        bookingData.category = 'cancelled';
+                    } else {
+                        bookingData.category = 'pending';
+                    }
+                    
                     bookingsData.push(bookingData);
                 });
                 
-                // Sort bookings with custom priority logic
+                // Sort bookings by date (earliest first within each category)
                 bookingsData.sort((a, b) => {
-                    const currentDate = new Date();
                     const dateA = a.date ? new Date(a.date) : new Date(0);
                     const dateB = b.date ? new Date(b.date) : new Date(0);
-                    
-                    // Normalize status values (handle case variations and defaults)
-                    const statusA = (a.status || 'pending').toLowerCase().trim();
-                    const statusB = (b.status || 'pending').toLowerCase().trim();
-                    
-                    // Status priority: pending > confirmed > cancelled
-                    const statusPriority = {
-                        'pending': 1,
-                        'confirmed': 2,
-                        'cancelled': 3
-                    };
-                    
-                    const priorityA = statusPriority[statusA] || 2;
-                    const priorityB = statusPriority[statusB] || 2;
-                    
-                    // Debug logging to see what's happening
-                    console.log(`Comparing: ${a.guideName} (${statusA}, priority: ${priorityA}) vs ${b.guideName} (${statusB}, priority: ${priorityB})`);
-                    
-                    // If different status priorities, sort by status (lower number = higher priority)
-                    if (priorityA !== priorityB) {
-                        return priorityA - priorityB;
-                    }
-                    
-                    // For confirmed bookings, prioritize future dates over past dates
-                    if (statusA === 'confirmed' && statusB === 'confirmed') {
-                        const aIsFuture = dateA >= currentDate;
-                        const bIsFuture = dateB >= currentDate;
-                        
-                        // Both future or both past - sort by date (latest first)
-                        if (aIsFuture === bIsFuture) {
-                            return dateB.getTime() - dateA.getTime();
-                        }
-                        
-                        // Future dates come before past dates
-                        return bIsFuture ? 1 : -1;
-                    }
-                    
-                    // For same status (pending or cancelled), sort by date (latest first)
-                    return dateB.getTime() - dateA.getTime();
+                    return dateA.getTime() - dateB.getTime();
                 });
-                
-                // Debug: Log the final sorted order
-                console.log('Final sorted bookings:', bookingsData.map(b => `${b.guideName} - ${b.status} - ${b.date}`));
                 
                 setBookings(bookingsData);
             } catch (err) {
@@ -158,6 +142,43 @@ export default function Profile() {
                 console.log("Error fetching reviews:", err.message);
             }
         }
+    };
+
+    // Filter bookings based on selected category
+    const getFilteredBookings = () => {
+        const filtered = bookings.filter(booking => booking.category === bookingFilter);
+        
+        // Sort filtered bookings based on category
+        return filtered.sort((a, b) => {
+            const dateA = a.date ? new Date(a.date) : new Date(0);
+            const dateB = b.date ? new Date(b.date) : new Date(0);
+            
+            // For cancelled bookings, show latest dates first (big dates first)
+            if (bookingFilter === 'cancelled') {
+                return dateB.getTime() - dateA.getTime();
+            }
+            
+            // For all other categories (pending, accepted, history), show earliest dates first
+            return dateA.getTime() - dateB.getTime();
+        });
+    };
+
+    // Get booking counts for each category
+    const getBookingCounts = () => {
+        const counts = {
+            pending: 0,
+            accepted: 0,
+            cancelled: 0,
+            history: 0
+        };
+        
+        bookings.forEach(booking => {
+            if (counts.hasOwnProperty(booking.category)) {
+                counts[booking.category]++;
+            }
+        });
+        
+        return counts;
     };
 
     const handleLogout = async () => {
@@ -198,9 +219,9 @@ export default function Profile() {
 
         const user = auth.currentUser;
         if (user && selectedBooking) {
-            // Check if booking is confirmed
-            if (selectedBooking.status !== 'confirmed') {
-                Alert.alert('Error', 'You can only review confirmed bookings');
+            // Check if booking is confirmed or accepted
+            if (selectedBooking.status !== 'confirmed' && selectedBooking.status !== 'accepted') {
+                Alert.alert('Error', 'You can only review confirmed or accepted bookings');
                 return;
             }
 
@@ -365,6 +386,7 @@ export default function Profile() {
     const getStatusStyle = (status) => {
         switch (status) {
             case 'confirmed':
+            case 'accepted':
                 return { backgroundColor: '#E8F5E8', color: '#2E7D2E', borderColor: '#81C784' };
             case 'pending':
                 return { backgroundColor: '#FFF8E1', color: '#F57F17', borderColor: '#FFE082' };
@@ -423,7 +445,7 @@ export default function Profile() {
                 </View>
                 
                 <View style={styles.bookingActions}>
-                    {item.status === 'confirmed' ? (
+                    {(item.status === 'confirmed' || item.status === 'accepted') ? (
                         item.hasReview ? (
                             <View style={styles.reviewedInfo}>
                                 <Text style={styles.reviewedText}>✓ Already Reviewed</Text>
@@ -525,12 +547,16 @@ export default function Profile() {
                     >
                         <View style={styles.profileCard}>
                             <View style={styles.profileImageContainer}>
-                                <Image
-                                    source={profileImageUri ? { uri: profileImageUri } : 
-                                           userData?.profileImageUrl ? { uri: userData.profileImageUrl } :
-                                           require('../../assets/images/habib.jpg')}
-                                    style={styles.profileImage}
-                                />
+                                {profileImageUri || userData?.profileImageUrl ? (
+                                    <Image
+                                        source={profileImageUri ? { uri: profileImageUri } : { uri: userData.profileImageUrl }}
+                                        style={styles.profileImage}
+                                    />
+                                ) : (
+                                    <View style={styles.defaultProfileIcon}>
+                                        <MaterialIcons name="account-circle" size={108} color="#6200EE" />
+                                    </View>
+                                )}
                                 <Text style={styles.profileName}>
                                     {auth.currentUser?.displayName}
                                 </Text>
@@ -596,25 +622,72 @@ export default function Profile() {
                     </ScrollView>
                 );
             case 'bookings':
+                const filteredBookings = getFilteredBookings();
+                const bookingCounts = getBookingCounts();
+                
                 return (
                     <View style={styles.tabContent}>
                         <Text style={styles.tabTitle}>My Bookings</Text>
-                        {bookings.length > 0 ? (
+                        
+                        {/* Booking Filter Buttons */}
+                        <View style={styles.filterContainer}>
+                            {[
+                                { key: 'pending', label: 'Pending', icon: '⏳' },
+                                { key: 'accepted', label: 'Accepted', icon: '✅' },
+                                { key: 'cancelled', label: 'Cancelled', icon: '❌' },
+                                { key: 'history', label: 'History', icon: '📜' }
+                            ].map((filter) => (
+                                <TouchableOpacity
+                                    key={filter.key}
+                                    style={[
+                                        styles.filterButton,
+                                        bookingFilter === filter.key && styles.activeFilterButton
+                                    ]}
+                                    onPress={() => setBookingFilter(filter.key)}
+                                >
+                                    <Text style={styles.filterIcon}>{filter.icon}</Text>
+                                    <Text style={[
+                                        styles.filterText,
+                                        bookingFilter === filter.key && styles.activeFilterText
+                                    ]}>
+                                        {filter.label}
+                                    </Text>
+                                    <View style={[
+                                        styles.filterCount,
+                                        bookingFilter === filter.key && styles.activeFilterCount
+                                    ]}>
+                                        <Text style={[
+                                            styles.filterCountText,
+                                            bookingFilter === filter.key && styles.activeFilterCountText
+                                        ]}>
+                                            {bookingCounts[filter.key]}
+                                        </Text>
+                                    </View>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                        
+                        {filteredBookings.length > 0 ? (
                             <FlatList
-                                data={bookings}
+                                data={filteredBookings}
                                 renderItem={renderBookingItem}
                                 keyExtractor={(item) => item.id}
                                 showsVerticalScrollIndicator={false}
+                                style={styles.bookingsList}
                             />
                         ) : (
                             <View style={styles.emptyState}>
-                                <Text style={styles.emptyStateText}>No bookings yet</Text>
-                                <TouchableOpacity 
-                                    style={styles.browseButton}
-                                    onPress={() => router.push('/guide')}
-                                >
-                                    <Text style={styles.browseButtonText}>Browse Guides</Text>
-                                </TouchableOpacity>
+                                <Text style={styles.emptyStateText}>
+                                    No {bookingFilter} bookings
+                                </Text>
+                                {bookingFilter === 'pending' && (
+                                    <TouchableOpacity 
+                                        style={styles.browseButton}
+                                        onPress={() => router.push('/guide')}
+                                    >
+                                        <Text style={styles.browseButtonText}>Browse Guides</Text>
+                                    </TouchableOpacity>
+                                )}
                             </View>
                         )}
                     </View>
@@ -666,7 +739,14 @@ export default function Profile() {
                                     styles.tabButton,
                                     activeTab === tab && styles.activeTabButton
                                 ]}
-                                onPress={() => setActiveTab(tab)}
+                                onPress={() => {
+                                    setActiveTab(tab);
+                                    // When switching to bookings tab, refresh data and show pending by default
+                                    if (tab === 'bookings') {
+                                        setBookingFilter('pending');
+                                        fetchUserBookings();
+                                    }
+                                }}
                             >
                                 <Text style={[
                                     styles.tabButtonText,
@@ -909,6 +989,23 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.2,
         shadowRadius: 4,
     },
+    defaultProfileIcon: {
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        marginBottom: 15,
+        backgroundColor: '#F8F9FA',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 3,
+        borderColor: '#6200EE',
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 4,
+        overflow: 'hidden',
+    },
     profileName: {
         fontSize: 24,
         fontWeight: 'bold',
@@ -969,6 +1066,67 @@ const styles = StyleSheet.create({
         color: '#666',
     },
     tabContent: {
+        flex: 1,
+    },
+    filterContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 20,
+        paddingHorizontal: 5,
+    },
+    filterButton: {
+        flex: 1,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 12,
+        padding: 12,
+        marginHorizontal: 3,
+        alignItems: 'center',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        borderWidth: 1,
+        borderColor: '#E0E0E0',
+    },
+    activeFilterButton: {
+        backgroundColor: '#6200EE',
+        borderColor: '#6200EE',
+        elevation: 4,
+    },
+    filterIcon: {
+        fontSize: 16,
+        marginBottom: 4,
+    },
+    filterText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#666',
+        marginBottom: 4,
+    },
+    activeFilterText: {
+        color: '#FFFFFF',
+    },
+    filterCount: {
+        backgroundColor: '#F0F0F0',
+        borderRadius: 10,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        minWidth: 20,
+        alignItems: 'center',
+    },
+    activeFilterCount: {
+        backgroundColor: 'rgba(255,255,255,0.2)',
+    },
+    filterCountText: {
+        fontSize: 10,
+        fontWeight: 'bold',
+        color: '#666',
+    },
+    activeFilterCountText: {
+        color: '#FFFFFF',
+    },
+    bookingsList: {
         flex: 1,
     },
     tabTitle: {

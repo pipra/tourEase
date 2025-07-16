@@ -1,3 +1,4 @@
+import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { signOut } from 'firebase/auth';
 import {
@@ -15,6 +16,7 @@ import {
     Image,
     Modal,
     RefreshControl,
+    ScrollView,
     StyleSheet,
     Text,
     TextInput,
@@ -27,6 +29,7 @@ import { auth, db } from '../(auth)/firebase';
 const GuideDashboard = () => {
     const [activeTab, setActiveTab] = useState('profile');
     const [bookings, setBookings] = useState([]);
+    const [bookingCategory, setBookingCategory] = useState('pending');
     const [guideData, setGuideData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -119,6 +122,13 @@ const GuideDashboard = () => {
         fetchData();
     }, [fetchData]);
 
+    // Auto-refresh when screen comes into focus
+    useFocusEffect(
+        useCallback(() => {
+            fetchData();
+        }, [fetchData])
+    );
+
     const handleBookingStatusUpdate = async (bookingId, newStatus) => {
         try {
             await updateDoc(doc(db, 'bookings', bookingId), {
@@ -179,6 +189,43 @@ const GuideDashboard = () => {
         );
     };
 
+    // Function to get filtered bookings based on category
+    const getFilteredBookings = () => {
+        const now = new Date();
+        const currentDate = now.toISOString().split('T')[0];
+        
+        const filtered = bookings.filter(booking => {
+            const bookingDate = booking.date;
+            const isPastDate = bookingDate < currentDate;
+            
+            switch(bookingCategory) {
+                case 'pending':
+                    return booking.status === 'pending' && !isPastDate;
+                case 'accepted':
+                    return booking.status === 'confirmed' && !isPastDate;
+                case 'cancelled':
+                    return booking.status === 'cancelled';
+                case 'history':
+                    return (booking.status === 'confirmed' && isPastDate);
+                default:
+                    return true;
+            }
+        });
+
+        // Sort bookings based on category
+        return filtered.sort((a, b) => {
+            const dateA = new Date(a.date);
+            const dateB = new Date(b.date);
+            
+            // For cancelled bookings, show latest dates first
+            if (bookingCategory === 'cancelled') {
+                return dateB - dateA;
+            }
+            // For all other categories, show earliest dates first
+            return dateA - dateB;
+        });
+    };
+
     const renderBookingItem = ({ item }) => (
         <TouchableOpacity 
             style={styles.bookingCard}
@@ -223,7 +270,7 @@ const GuideDashboard = () => {
     );
 
     const renderProfileTab = () => (
-        <View style={styles.profileContainer}>
+        <ScrollView style={styles.profileContainer} showsVerticalScrollIndicator={false}>
             {guideData && (
                 <>
                     {/* Profile Header Card */}
@@ -316,7 +363,7 @@ const GuideDashboard = () => {
                     </TouchableOpacity>
                 </>
             )}
-        </View>
+        </ScrollView>
     );
 
     const renderStatsTab = () => (
@@ -401,19 +448,82 @@ const GuideDashboard = () => {
                 {activeTab === 'profile' && renderProfileTab()}
                 
                 {activeTab === 'bookings' && (
-                    <FlatList
-                        data={bookings}
-                        renderItem={renderBookingItem}
-                        keyExtractor={(item) => item.id}
-                        refreshControl={
-                            <RefreshControl refreshing={refreshing} onRefresh={fetchData} />
-                        }
-                        showsVerticalScrollIndicator={false}
-                        contentContainerStyle={styles.bookingsList}
-                        ListEmptyComponent={
-                            <Text style={styles.emptyText}>No bookings found</Text>
-                        }
-                    />
+                    <View style={styles.bookingsContainer}>
+                        {/* Category Filter Buttons */}
+                        <View style={styles.categoryContainer}>
+                            {[
+                                { key: 'pending', label: 'Pending', icon: '⏳' },
+                                { key: 'accepted', label: 'Accepted', icon: '✅' },
+                                { key: 'cancelled', label: 'Cancelled', icon: '❌' },
+                                { key: 'history', label: 'History', icon: '📜' }
+                            ].map((category) => {
+                                const count = bookings.filter(booking => {
+                                    const now = new Date();
+                                    const currentDate = now.toISOString().split('T')[0];
+                                    const bookingDate = booking.date;
+                                    const isPastDate = bookingDate < currentDate;
+                                    
+                                    switch(category.key) {
+                                        case 'pending':
+                                            return booking.status === 'pending' && !isPastDate;
+                                        case 'accepted':
+                                            return booking.status === 'confirmed' && !isPastDate;
+                                        case 'cancelled':
+                                            return booking.status === 'cancelled';
+                                        case 'history':
+                                            return (booking.status === 'confirmed' && isPastDate);
+                                        default:
+                                            return false;
+                                    }
+                                }).length;
+
+                                return (
+                                    <TouchableOpacity
+                                        key={category.key}
+                                        style={[
+                                            styles.categoryButton,
+                                            bookingCategory === category.key && styles.activeCategoryButton
+                                        ]}
+                                        onPress={() => setBookingCategory(category.key)}
+                                    >
+                                        <Text style={styles.categoryIcon}>{category.icon}</Text>
+                                        <Text style={[
+                                            styles.categoryButtonText,
+                                            bookingCategory === category.key && styles.activeCategoryButtonText
+                                        ]}>
+                                            {category.label}
+                                        </Text>
+                                        <View style={[
+                                            styles.categoryCount,
+                                            bookingCategory === category.key && styles.activeCategoryCount
+                                        ]}>
+                                            <Text style={[
+                                                styles.categoryCountText,
+                                                bookingCategory === category.key && styles.activeCategoryCountText
+                                            ]}>
+                                                {count}
+                                            </Text>
+                                        </View>
+                                    </TouchableOpacity>
+                                );
+                            })}
+                        </View>
+
+                        {/* Bookings List */}
+                        <FlatList
+                            data={getFilteredBookings()}
+                            renderItem={renderBookingItem}
+                            keyExtractor={(item) => item.id}
+                            refreshControl={
+                                <RefreshControl refreshing={refreshing} onRefresh={fetchData} />
+                            }
+                            showsVerticalScrollIndicator={false}
+                            contentContainerStyle={styles.bookingsList}
+                            ListEmptyComponent={
+                                <Text style={styles.emptyText}>No {bookingCategory} bookings found</Text>
+                            }
+                        />
+                    </View>
                 )}
                 
                 {activeTab === 'stats' && renderStatsTab()}
@@ -1100,6 +1210,71 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontSize: 15,
         fontWeight: '600',
+    },
+    
+    // Category Filter Styles
+    bookingsContainer: {
+        flex: 1,
+    },
+    categoryContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 20,
+        paddingHorizontal: 20,
+        paddingTop: 15,
+    },
+    categoryButton: {
+        flex: 1,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 12,
+        padding: 12,
+        marginHorizontal: 3,
+        alignItems: 'center',
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        borderWidth: 1,
+        borderColor: '#E0E0E0',
+    },
+    activeCategoryButton: {
+        backgroundColor: '#6200EE',
+        borderColor: '#6200EE',
+        elevation: 4,
+    },
+    categoryIcon: {
+        fontSize: 16,
+        marginBottom: 4,
+    },
+    categoryButtonText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: '#666',
+        marginBottom: 4,
+        textAlign: 'center',
+    },
+    activeCategoryButtonText: {
+        color: '#FFFFFF',
+    },
+    categoryCount: {
+        backgroundColor: '#F0F0F0',
+        borderRadius: 10,
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        minWidth: 20,
+        alignItems: 'center',
+    },
+    activeCategoryCount: {
+        backgroundColor: 'rgba(255,255,255,0.2)',
+    },
+    categoryCountText: {
+        fontSize: 10,
+        fontWeight: 'bold',
+        color: '#666',
+    },
+    activeCategoryCountText: {
+        color: '#FFFFFF',
     },
 });
 

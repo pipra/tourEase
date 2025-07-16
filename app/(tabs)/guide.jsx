@@ -1,5 +1,4 @@
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { addDoc, collection, getDocs, query } from 'firebase/firestore';
+import { addDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, Modal, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,8 +17,10 @@ const Guide = () => {
     });
     const [loading, setLoading] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
-    const [showDatePicker, setShowDatePicker] = useState(false);
-    const [selectedDate, setSelectedDate] = useState(new Date());
+    const [bookedDates, setBookedDates] = useState([]);
+    const [showCustomCalendar, setShowCustomCalendar] = useState(false);
+    const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
+    const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
 
     const filteredGuides = guides
         .filter(guide => guide.location.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -54,6 +55,28 @@ const Guide = () => {
         }
     };
 
+    const getBookedDates = async (guideId) => {
+        try {
+            const q = query(
+                collection(db, "bookings"),
+                where("guideId", "==", guideId),
+                where("status", "==", "confirmed")
+            );
+            const res = await getDocs(q);
+            
+            const dates = [];
+            res.forEach((doc) => {
+                const booking = doc.data();
+                if (booking.date) {
+                    dates.push(booking.date);
+                }
+            });
+            setBookedDates(dates);
+        } catch (error) {
+            console.error('Error fetching booked dates:', error);
+        }
+    };
+
     const onRefresh = async () => {
         setRefreshing(true);
         await getGuides();
@@ -64,8 +87,11 @@ const Guide = () => {
         getGuides();
     }, []);
 
-    const handleBookButtonClick = (guide) => {
+    const handleBookButtonClick = async (guide) => {
         setSelectedGuide(guide);
+        // Fetch booked dates for this guide
+        const guideId = guide.userId || guide.id;
+        await getBookedDates(guideId);
         setIsModalVisible(true);
     };
 
@@ -81,8 +107,8 @@ const Guide = () => {
             guests: '1',
             message: ''
         });
-        setSelectedDate(new Date());
-        setShowDatePicker(false);
+        setShowCustomCalendar(false);
+        setBookedDates([]); // Reset booked dates
     };
 
     const handleCloseDetailsModal = () => {
@@ -91,16 +117,7 @@ const Guide = () => {
     };
 
     const handleDateSelect = () => {
-        setShowDatePicker(true);
-    };
-
-    const onDateChange = (event, date) => {
-        setShowDatePicker(false);
-        if (date) {
-            setSelectedDate(date);
-            const formattedDate = date.toISOString().split('T')[0]; // YYYY-MM-DD format
-            setBookingForm({...bookingForm, date: formattedDate});
-        }
+        setShowCustomCalendar(true);
     };
 
     const handleConfirmBooking = async () => {
@@ -117,6 +134,12 @@ const Guide = () => {
 
         if (!bookingForm.guests || parseInt(bookingForm.guests) < 1) {
             Alert.alert('Error', 'Please enter a valid number of guests');
+            return;
+        }
+
+        // Double-check if the selected date is available
+        if (bookedDates.includes(bookingForm.date)) {
+            Alert.alert('Error', 'This date is no longer available. Please select a different date.');
             return;
         }
 
@@ -151,6 +174,68 @@ const Guide = () => {
         } finally {
             setLoading(false);
         }
+    };
+
+    const generateCalendarDays = (month, year) => {
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+        const daysInMonth = lastDay.getDate();
+        const startingDayOfWeek = firstDay.getDay();
+        
+        const days = [];
+        
+        // Add empty cells for days before the first day of the month
+        for (let i = 0; i < startingDayOfWeek; i++) {
+            days.push(null);
+        }
+        
+        // Add all days of the month
+        for (let day = 1; day <= daysInMonth; day++) {
+            days.push(day);
+        }
+        
+        return days;
+    };
+
+    const isDateBooked = (day, month, year) => {
+        if (!day) return false;
+        const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        return bookedDates.includes(dateString);
+    };
+
+    const isDatePast = (day, month, year) => {
+        if (!day) return false;
+        const date = new Date(year, month, day);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return date < today;
+    };
+
+    const handleDateSelection = (day, month, year) => {
+        if (!day) return;
+        
+        const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        
+        if (isDateBooked(day, month, year)) {
+            Alert.alert(
+                'Date Unavailable',
+                'This date is already booked by another customer. Please select a different date.',
+                [{ text: 'OK' }]
+            );
+            return;
+        }
+        
+        if (isDatePast(day, month, year)) {
+            Alert.alert(
+                'Invalid Date',
+                'Please select a future date.',
+                [{ text: 'OK' }]
+            );
+            return;
+        }
+        
+        setBookingForm({...bookingForm, date: dateString});
+        setShowCustomCalendar(false);
     };
 
     return (
@@ -296,6 +381,17 @@ const Guide = () => {
                                     ৳{selectedGuide.pricePerDay}/day per person
                                 </Text>
                                 
+                                {bookedDates.length > 0 && (
+                                    <View style={styles.availabilityInfo}>
+                                        {/* <Text style={styles.availabilityText}>
+                                            ⚠️ {bookedDates.length} date{bookedDates.length !== 1 ? 's' : ''} already booked
+                                        </Text> */}
+                                        <Text style={styles.availabilitySubtext}>
+                                            Please select an available date
+                                        </Text>
+                                    </View>
+                                )}
+                                
                                 <TouchableOpacity 
                                     style={styles.datePickerButton}
                                     onPress={handleDateSelect}
@@ -305,14 +401,85 @@ const Guide = () => {
                                     </Text>
                                 </TouchableOpacity>
                                 
-                                {showDatePicker && (
-                                    <DateTimePicker
-                                        value={selectedDate}
-                                        mode="date"
-                                        display="default"
-                                        onChange={onDateChange}
-                                        minimumDate={new Date()}
-                                    />
+                                {showCustomCalendar && (
+                                    <View style={styles.calendarContainer}>
+                                        <View style={styles.calendarHeader}>
+                                            <TouchableOpacity 
+                                                onPress={() => {
+                                                    if (currentMonth === 0) {
+                                                        setCurrentMonth(11);
+                                                        setCurrentYear(currentYear - 1);
+                                                    } else {
+                                                        setCurrentMonth(currentMonth - 1);
+                                                    }
+                                                }}
+                                                style={styles.navButton}
+                                            >
+                                                <Text style={styles.navButtonText}>‹</Text>
+                                            </TouchableOpacity>
+                                            <Text style={styles.monthYearText}>
+                                                {new Date(currentYear, currentMonth).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                                            </Text>
+                                            <TouchableOpacity 
+                                                onPress={() => {
+                                                    if (currentMonth === 11) {
+                                                        setCurrentMonth(0);
+                                                        setCurrentYear(currentYear + 1);
+                                                    } else {
+                                                        setCurrentMonth(currentMonth + 1);
+                                                    }
+                                                }}
+                                                style={styles.navButton}
+                                            >
+                                                <Text style={styles.navButtonText}>›</Text>
+                                            </TouchableOpacity>
+                                        </View>
+                                        
+                                        <View style={styles.weekDaysHeader}>
+                                            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+                                                <Text key={day} style={styles.weekDayText}>{day}</Text>
+                                            ))}
+                                        </View>
+                                        
+                                        <View style={styles.calendarDays}>
+                                            {generateCalendarDays(currentMonth, currentYear).map((day, index) => {
+                                                const isBooked = isDateBooked(day, currentMonth, currentYear);
+                                                const isPast = isDatePast(day, currentMonth, currentYear);
+                                                const isSelected = bookingForm.date === `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                                                
+                                                return (
+                                                    <TouchableOpacity
+                                                        key={index}
+                                                        style={[
+                                                            styles.dayButton,
+                                                            !day && styles.emptyDay,
+                                                            isBooked && styles.bookedDay,
+                                                            isPast && styles.pastDay,
+                                                            isSelected && styles.selectedDay
+                                                        ]}
+                                                        onPress={() => handleDateSelection(day, currentMonth, currentYear)}
+                                                        disabled={!day || isBooked || isPast}
+                                                    >
+                                                        <Text style={[
+                                                            styles.dayText,
+                                                            isBooked && styles.bookedDayText,
+                                                            isPast && styles.pastDayText,
+                                                            isSelected && styles.selectedDayText
+                                                        ]}>
+                                                            {day}
+                                                        </Text>
+                                                    </TouchableOpacity>
+                                                );
+                                            })}
+                                        </View>
+                                        
+                                        <TouchableOpacity 
+                                            style={styles.closeCalendarButton}
+                                            onPress={() => setShowCustomCalendar(false)}
+                                        >
+                                            <Text style={styles.closeCalendarText}>Close</Text>
+                                        </TouchableOpacity>
+                                    </View>
                                 )}
                                 
                                 <TextInput
@@ -730,6 +897,26 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         marginBottom: 25,
     },
+    availabilityInfo: {
+        backgroundColor: '#FFF3CD',
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: '#FFC107',
+    },
+    availabilityText: {
+        fontSize: 14,
+        color: '#856404',
+        fontWeight: '600',
+        textAlign: 'center',
+        marginBottom: 4,
+    },
+    availabilitySubtext: {
+        fontSize: 12,
+        color: '#856404',
+        textAlign: 'center',
+    },
     totalPrice: {
         fontSize: 18,
         fontWeight: 'bold',
@@ -980,6 +1167,104 @@ const styles = StyleSheet.create({
     detailsBookButtonText: {
         color: '#FFFFFF',
         fontSize: 18,
+        fontWeight: 'bold',
+    },
+    
+    // Calendar Styles
+    calendarContainer: {
+        backgroundColor: 'white',
+        borderRadius: 10,
+        marginTop: 10,
+        padding: 15,
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+    },
+    calendarHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 15,
+    },
+    navButton: {
+        padding: 10,
+        backgroundColor: '#8B5CF6',
+        borderRadius: 5,
+    },
+    navButtonText: {
+        color: 'white',
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
+    monthYearText: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#333',
+    },
+    weekDaysHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        marginBottom: 10,
+    },
+    weekDayText: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: '#666',
+        textAlign: 'center',
+        width: 40,
+    },
+    calendarDays: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        justifyContent: 'space-around',
+    },
+    dayButton: {
+        width: 40,
+        height: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
+        margin: 2,
+        borderRadius: 20,
+        backgroundColor: '#f5f5f5',
+    },
+    emptyDay: {
+        backgroundColor: 'transparent',
+    },
+    bookedDay: {
+        backgroundColor: '#FF8C00', // Orange color for booked dates
+    },
+    pastDay: {
+        backgroundColor: '#e0e0e0',
+    },
+    selectedDay: {
+        backgroundColor: '#8B5CF6',
+    },
+    dayText: {
+        fontSize: 16,
+        color: '#333',
+    },
+    bookedDayText: {
+        color: 'white',
+        fontWeight: 'bold',
+    },
+    pastDayText: {
+        color: '#999',
+    },
+    selectedDayText: {
+        color: 'white',
+        fontWeight: 'bold',
+    },
+    closeCalendarButton: {
+        marginTop: 15,
+        backgroundColor: '#8B5CF6',
+        padding: 12,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    closeCalendarText: {
+        color: 'white',
         fontWeight: 'bold',
     },
 });

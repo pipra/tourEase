@@ -1,6 +1,8 @@
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import { collection, getDocs } from 'firebase/firestore';
+import { useCallback, useEffect, useState } from 'react';
 import {
+    ActivityIndicator,
     FlatList,
     Image,
     Modal,
@@ -12,11 +14,12 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { db } from '../(auth)/firebase';
 
-// Places data
-const PLACES_DATA = [
+// Default places data (existing places)
+const DEFAULT_PLACES = [
     {
-        id: '1',
+        id: 'default-1',
         name: "Cox's Bazar",
         image: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=400&q=80',
         description: "World's longest natural sea beach with 120km of sandy coastline",
@@ -26,9 +29,10 @@ const PLACES_DATA = [
         location: 'Chittagong Division',
         bestTime: 'November - March',
         highlights: ['Longest sea beach', 'Sunset views', 'Water sports', 'Fresh seafood'],
+        isDefault: true,
     },
     {
-        id: '2',
+        id: 'default-2',
         name: 'Sundarbans',
         image: 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?auto=format&fit=crop&w=400&q=80',
         description: 'Largest mangrove forest in the world, home to Royal Bengal Tigers',
@@ -38,9 +42,10 @@ const PLACES_DATA = [
         location: 'Khulna Division',
         bestTime: 'October - March',
         highlights: ['Royal Bengal Tigers', 'Mangrove ecosystem', 'Boat safari', 'Wildlife photography'],
+        isDefault: true,
     },
     {
-        id: '3',
+        id: 'default-3',
         name: 'Sylhet',
         image: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=400&q=80',
         description: 'Tea capital of Bangladesh with rolling hills and tea gardens',
@@ -50,9 +55,10 @@ const PLACES_DATA = [
         location: 'Sylhet Division',
         bestTime: 'October - April',
         highlights: ['Tea gardens', 'Jaflong', 'Ratargul swamp forest', 'Seven-layer tea'],
+        isDefault: true,
     },
     {
-        id: '4',
+        id: 'default-4',
         name: 'Bandarban',
         image: 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=400&q=80',
         description: 'Hill district with highest peaks and indigenous communities',
@@ -62,9 +68,10 @@ const PLACES_DATA = [
         location: 'Chittagong Hill Tracts',
         bestTime: 'October - March',
         highlights: ['Keokradong peak', 'Nilgiri', 'Tribal culture', 'Cloud watching'],
+        isDefault: true,
     },
     {
-        id: '5',
+        id: 'default-5',
         name: 'Rangamati',
         image: 'https://images.unsplash.com/photo-1439066615861-d1af74d74000?auto=format&fit=crop&w=400&q=80',
         description: 'Lake city with beautiful Kaptai Lake and tribal heritage',
@@ -74,9 +81,10 @@ const PLACES_DATA = [
         location: 'Chittagong Hill Tracts',
         bestTime: 'October - March',
         highlights: ['Kaptai Lake', 'Hanging bridge', 'Tribal museums', 'Boat rides'],
+        isDefault: true,
     },
     {
-        id: '6',
+        id: 'default-6',
         name: "Saint Martin's Island",
         image: 'https://images.unsplash.com/photo-1559827260-dc66d52bef19?auto=format&fit=crop&w=400&q=80',
         description: "Bangladesh's only coral island with pristine beaches",
@@ -86,18 +94,81 @@ const PLACES_DATA = [
         location: 'Bay of Bengal',
         bestTime: 'November - February',
         highlights: ['Coral island', 'Clear blue water', 'Coconut trees', 'Marine life'],
+        isDefault: true,
     },
 ];
-
-const CATEGORIES = ['All', 'Beach', 'Forest', 'Hills', 'Lake', 'Island'];
 
 const Place = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('All');
     const [isModalVisible, setIsModalVisible] = useState(false);
     const [selectedPlace, setSelectedPlace] = useState(null);
+    const [places, setPlaces] = useState([]);
+    const [categories, setCategories] = useState(['All']);
+    const [loading, setLoading] = useState(true);
 
-    const filteredPlaces = PLACES_DATA.filter(place => {
+    // Fetch locations from Firebase and combine with default places
+    const fetchLocations = useCallback(async () => {
+        try {
+            const locationsCollection = collection(db, 'locations');
+            const locationsSnapshot = await getDocs(locationsCollection);
+            const firebaseLocations = [];
+            
+            locationsSnapshot.forEach((doc) => {
+                const data = doc.data();
+                // Transform Firebase data to match the expected format
+                const transformedLocation = {
+                    id: doc.id,
+                    name: data.name || '',
+                    image: data.image || 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=400&q=80',
+                    description: data.description || '',
+                    category: data.category || 'Other',
+                    rating: data.rating || 4.0,
+                    reviews: data.reviews || 0,
+                    location: data.location || data.name || '',
+                    bestTime: data.bestTimeToVisit || 'Year round',
+                    highlights: Array.isArray(data.attractions) ? data.attractions : 
+                               (data.attractions ? data.attractions.split(',').map(s => s.trim()) : []),
+                    // Additional fields from Firebase
+                    averageTemperature: data.averageTemperature,
+                    language: data.language,
+                    currency: data.currency,
+                    isDefault: false,
+                };
+                firebaseLocations.push(transformedLocation);
+            });
+
+            // Combine default places with Firebase locations
+            const allPlaces = [...DEFAULT_PLACES, ...firebaseLocations];
+            setPlaces(allPlaces);
+
+            // Extract unique categories from all data
+            const uniqueCategories = ['All', ...new Set(allPlaces.map(place => place.category))];
+            setCategories(uniqueCategories);
+            
+            setLoading(false);
+        } catch (error) {
+            console.error('Error fetching locations:', error);
+            // If Firebase fails, still show default places
+            setPlaces(DEFAULT_PLACES);
+            const uniqueCategories = ['All', ...new Set(DEFAULT_PLACES.map(place => place.category))];
+            setCategories(uniqueCategories);
+            setLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchLocations();
+    }, [fetchLocations]);
+
+    // Refresh data when screen is focused (when admin adds new locations)
+    useFocusEffect(
+        useCallback(() => {
+            fetchLocations();
+        }, [fetchLocations])
+    );
+
+    const filteredPlaces = places.filter(place => {
         const matchesSearch = place.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                             place.location.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesCategory = selectedCategory === 'All' || place.category === selectedCategory;
@@ -165,8 +236,15 @@ const Place = () => {
                 <Text style={styles.placeDescription}>{item.description}</Text>
                 
                 <View style={styles.placeFooter}>
-                    <View style={styles.categoryTag}>
-                        <Text style={styles.categoryTagText}>{item.category}</Text>
+                    <View style={styles.categoryAndSource}>
+                        <View style={styles.categoryTag}>
+                            <Text style={styles.categoryTagText}>{item.category}</Text>
+                        </View>
+                        {!item.isDefault && (
+                            <View style={styles.adminTag}>
+                                <Text style={styles.adminTagText}>Admin Added</Text>
+                            </View>
+                        )}
                     </View>
                     <Text style={styles.bestTime}>Best: {item.bestTime}</Text>
                 </View>
@@ -191,37 +269,61 @@ const Place = () => {
                 <Text style={styles.headerSubtitle}>Discover beautiful destinations in Bangladesh</Text>
             </View>
 
-            {/* Search */}
-            <View style={styles.searchContainer}>
-                <TextInput
-                    style={styles.searchInput}
-                    placeholder="Search places or locations..."
-                    value={searchQuery}
-                    onChangeText={setSearchQuery}
-                    placeholderTextColor="#888"
-                />
-            </View>
+            {loading ? (
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#6200EE" />
+                    <Text style={styles.loadingText}>Loading amazing places...</Text>
+                </View>
+            ) : (
+                <>
+                    {/* Search */}
+                    <View style={styles.searchContainer}>
+                        <TextInput
+                            style={styles.searchInput}
+                            placeholder="Search places or locations..."
+                            value={searchQuery}
+                            onChangeText={setSearchQuery}
+                            placeholderTextColor="#888"
+                        />
+                    </View>
 
-            {/* Categories */}
-            <View style={styles.categoriesSection}>
-                <FlatList
-                    data={CATEGORIES}
-                    renderItem={renderCategory}
-                    keyExtractor={(item) => item}
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.categoriesList}
-                />
-            </View>
+                    {/* Categories */}
+                    <View style={styles.categoriesSection}>
+                        <FlatList
+                            data={categories}
+                            renderItem={renderCategory}
+                            keyExtractor={(item) => item}
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.categoriesList}
+                        />
+                    </View>
 
-            {/* Places List */}
-            <FlatList
-                data={filteredPlaces}
-                renderItem={renderPlace}
-                keyExtractor={(item) => item.id}
-                showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.placesList}
-            />
+                    {/* Places List */}
+                    {filteredPlaces.length > 0 ? (
+                        <FlatList
+                            data={filteredPlaces}
+                            renderItem={renderPlace}
+                            keyExtractor={(item) => item.id}
+                            showsVerticalScrollIndicator={false}
+                            contentContainerStyle={styles.placesList}
+                        />
+                    ) : (
+                        <View style={styles.noResultsContainer}>
+                            <Text style={styles.noResultsText}>
+                                {places.length === 0 
+                                    ? "Loading places..." 
+                                    : "No places found matching your search."}
+                            </Text>
+                            {places.length > 0 && (
+                                <Text style={styles.noResultsSubtext}>
+                                    Try adjusting your search or category filter.
+                                </Text>
+                            )}
+                        </View>
+                    )}
+                </>
+            )}
 
             {/* Place Details Modal */}
             <Modal
@@ -306,6 +408,37 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#f8f9fa',
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 20,
+    },
+    loadingText: {
+        marginTop: 16,
+        fontSize: 16,
+        color: '#6200EE',
+        fontWeight: '500',
+    },
+    noResultsContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 40,
+    },
+    noResultsText: {
+        fontSize: 18,
+        color: '#666',
+        textAlign: 'center',
+        marginBottom: 8,
+        fontWeight: '500',
+    },
+    noResultsSubtext: {
+        fontSize: 14,
+        color: '#888',
+        textAlign: 'center',
+        lineHeight: 20,
     },
     header: {
         backgroundColor: '#6200EE',
@@ -595,6 +728,11 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: 12,
     },
+    categoryAndSource: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
     categoryTag: {
         backgroundColor: '#E3F2FD',
         paddingHorizontal: 8,
@@ -605,6 +743,17 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '600',
         color: '#1976D2',
+    },
+    adminTag: {
+        backgroundColor: '#E8F5E8',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 8,
+    },
+    adminTagText: {
+        fontSize: 10,
+        fontWeight: '500',
+        color: '#2E7D2E',
     },
     bestTime: {
         fontSize: 12,
