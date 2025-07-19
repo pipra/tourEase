@@ -17,86 +17,86 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { db } from '../(auth)/firebase';
 
 // Default places data (existing places)
-const DEFAULT_PLACES = [
-    {
-        id: 'default-1',
-        name: "Cox's Bazar",
-        image: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=400&q=80',
-        description: "World's longest natural sea beach with 120km of sandy coastline",
-        category: 'Beach',
-        rating: 4.6,
-        reviews: 1250,
-        location: 'Chittagong Division',
-        bestTime: 'November - March',
-        highlights: ['Longest sea beach', 'Sunset views', 'Water sports', 'Fresh seafood'],
-        isDefault: true,
-    },
-    {
-        id: 'default-2',
-        name: 'Sundarbans',
-        image: 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?auto=format&fit=crop&w=400&q=80',
-        description: 'Largest mangrove forest in the world, home to Royal Bengal Tigers',
-        category: 'Forest',
-        rating: 4.8,
-        reviews: 890,
-        location: 'Khulna Division',
-        bestTime: 'October - March',
-        highlights: ['Royal Bengal Tigers', 'Mangrove ecosystem', 'Boat safari', 'Wildlife photography'],
-        isDefault: true,
-    },
-    {
-        id: 'default-3',
-        name: 'Sylhet',
-        image: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=400&q=80',
-        description: 'Tea capital of Bangladesh with rolling hills and tea gardens',
-        category: 'Hills',
-        rating: 4.5,
-        reviews: 750,
-        location: 'Sylhet Division',
-        bestTime: 'October - April',
-        highlights: ['Tea gardens', 'Jaflong', 'Ratargul swamp forest', 'Seven-layer tea'],
-        isDefault: true,
-    },
-    {
-        id: 'default-4',
-        name: 'Bandarban',
-        image: 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=400&q=80',
-        description: 'Hill district with highest peaks and indigenous communities',
-        category: 'Hills',
-        rating: 4.7,
-        reviews: 620,
-        location: 'Chittagong Hill Tracts',
-        bestTime: 'October - March',
-        highlights: ['Keokradong peak', 'Nilgiri', 'Tribal culture', 'Cloud watching'],
-        isDefault: true,
-    },
-    {
-        id: 'default-5',
-        name: 'Rangamati',
-        image: 'https://images.unsplash.com/photo-1439066615861-d1af74d74000?auto=format&fit=crop&w=400&q=80',
-        description: 'Lake city with beautiful Kaptai Lake and tribal heritage',
-        category: 'Lake',
-        rating: 4.4,
-        reviews: 580,
-        location: 'Chittagong Hill Tracts',
-        bestTime: 'October - March',
-        highlights: ['Kaptai Lake', 'Hanging bridge', 'Tribal museums', 'Boat rides'],
-        isDefault: true,
-    },
-    {
-        id: 'default-6',
-        name: "Saint Martin's Island",
-        image: 'https://images.unsplash.com/photo-1559827260-dc66d52bef19?auto=format&fit=crop&w=400&q=80',
-        description: "Bangladesh's only coral island with pristine beaches",
-        category: 'Island',
-        rating: 4.3,
-        reviews: 920,
-        location: 'Bay of Bengal',
-        bestTime: 'November - February',
-        highlights: ['Coral island', 'Clear blue water', 'Coconut trees', 'Marine life'],
-        isDefault: true,
-    },
-];
+// const DEFAULT_PLACES = [
+//     {
+//         id: 'default-1',
+//         name: "Cox's Bazar",
+//         image: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=400&q=80',
+//         description: "World's longest natural sea beach with 120km of sandy coastline",
+//         category: 'Beach',
+//         rating: 4.6,
+//         reviews: 1250,
+//         location: 'Chittagong Division',
+//         bestTime: 'November - March',
+//         highlights: ['Longest sea beach', 'Sunset views', 'Water sports', 'Fresh seafood'],
+//         isDefault: true,
+//     },
+//     {
+//         id: 'default-2',
+//         name: 'Sundarbans',
+//         image: 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?auto=format&fit=crop&w=400&q=80',
+//         description: 'Largest mangrove forest in the world, home to Royal Bengal Tigers',
+//         category: 'Forest',
+//         rating: 4.8,
+//         reviews: 890,
+//         location: 'Khulna Division',
+//         bestTime: 'October - March',
+//         highlights: ['Royal Bengal Tigers', 'Mangrove ecosystem', 'Boat safari', 'Wildlife photography'],
+//         isDefault: true,
+//     },
+//     {
+//         id: 'default-3',
+//         name: 'Sylhet',
+//         image: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=400&q=80',
+//         description: 'Tea capital of Bangladesh with rolling hills and tea gardens',
+//         category: 'Hills',
+//         rating: 4.5,
+//         reviews: 750,
+//         location: 'Sylhet Division',
+//         bestTime: 'October - April',
+//         highlights: ['Tea gardens', 'Jaflong', 'Ratargul swamp forest', 'Seven-layer tea'],
+//         isDefault: true,
+//     },
+//     {
+//         id: 'default-4',
+//         name: 'Bandarban',
+//         image: 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=400&q=80',
+//         description: 'Hill district with highest peaks and indigenous communities',
+//         category: 'Hills',
+//         rating: 4.7,
+//         reviews: 620,
+//         location: 'Chittagong Hill Tracts',
+//         bestTime: 'October - March',
+//         highlights: ['Keokradong peak', 'Nilgiri', 'Tribal culture', 'Cloud watching'],
+//         isDefault: true,
+//     },
+//     {
+//         id: 'default-5',
+//         name: 'Rangamati',
+//         image: 'https://images.unsplash.com/photo-1439066615861-d1af74d74000?auto=format&fit=crop&w=400&q=80',
+//         description: 'Lake city with beautiful Kaptai Lake and tribal heritage',
+//         category: 'Lake',
+//         rating: 4.4,
+//         reviews: 580,
+//         location: 'Chittagong Hill Tracts',
+//         bestTime: 'October - March',
+//         highlights: ['Kaptai Lake', 'Hanging bridge', 'Tribal museums', 'Boat rides'],
+//         isDefault: true,
+//     },
+//     {
+//         id: 'default-6',
+//         name: "Saint Martin's Island",
+//         image: 'https://images.unsplash.com/photo-1559827260-dc66d52bef19?auto=format&fit=crop&w=400&q=80',
+//         description: "Bangladesh's only coral island with pristine beaches",
+//         category: 'Island',
+//         rating: 4.3,
+//         reviews: 920,
+//         location: 'Bay of Bengal',
+//         bestTime: 'November - February',
+//         highlights: ['Coral island', 'Clear blue water', 'Coconut trees', 'Marine life'],
+//         isDefault: true,
+//     },
+// ];
 
 const Place = () => {
     const [searchQuery, setSearchQuery] = useState('');
@@ -123,9 +123,10 @@ const Place = () => {
                     image: data.image || 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=400&q=80',
                     description: data.description || '',
                     category: data.category || 'Other',
-                    rating: data.rating || 4.0,
+                    rating: data.rating || 0.0,
                     reviews: data.reviews || 0,
-                    location: data.location || data.name || '',
+                    location: data.placeName || data.name || '',
+                    placeName: data.placeName || '', // Keep original placeName field
                     bestTime: data.bestTimeToVisit || 'Year round',
                     highlights: Array.isArray(data.attractions) ? data.attractions : 
                                (data.attractions ? data.attractions.split(',').map(s => s.trim()) : []),
@@ -139,7 +140,7 @@ const Place = () => {
             });
 
             // Combine default places with Firebase locations
-            const allPlaces = [...DEFAULT_PLACES, ...firebaseLocations];
+            const allPlaces = [...firebaseLocations];
             setPlaces(allPlaces);
 
             // Extract unique categories from all data
@@ -150,10 +151,10 @@ const Place = () => {
         } catch (error) {
             console.error('Error fetching locations:', error);
             // If Firebase fails, still show default places
-            setPlaces(DEFAULT_PLACES);
-            const uniqueCategories = ['All', ...new Set(DEFAULT_PLACES.map(place => place.category))];
-            setCategories(uniqueCategories);
-            setLoading(false);
+            // setPlaces(DEFAULT_PLACES);
+            // const uniqueCategories = ['All', ...new Set(DEFAULT_PLACES.map(place => place.category))];
+            // setCategories(uniqueCategories);
+            // setLoading(false);
         }
     }, []);
 
@@ -194,9 +195,11 @@ const Place = () => {
 
     const handleFindGuides = (place) => {
         handleCloseModal();
+        // Use the placeName for searching guides, fallback to location, then name
+        const searchTerm = place.placeName || ' ';
         router.push({
-            pathname: '/guide',
-            params: { searchLocation: place.name }
+            pathname: '/(tabs)/guide',
+            params: { searchLocation: searchTerm }
         });
     };
 
@@ -232,7 +235,7 @@ const Place = () => {
                     </View>
                 </View>
                 
-                <Text style={styles.placeLocation}>📍 {item.location}</Text>
+                <Text>📍 {item.location}</Text>
                 <Text style={styles.placeDescription}>{item.description}</Text>
                 
                 <View style={styles.placeFooter}>
@@ -391,7 +394,9 @@ const Place = () => {
                                             style={styles.findGuidesButton}
                                             onPress={() => handleFindGuides(selectedPlace)}
                                         >
-                                            <Text style={styles.findGuidesButtonText}>Find Guides for {selectedPlace.name}</Text>
+                                            <Text style={styles.findGuidesButtonText}>
+                                                Find Guides for {selectedPlace.name}
+                                            </Text>
                                         </TouchableOpacity>
                                     </View>
                                 </ScrollView>

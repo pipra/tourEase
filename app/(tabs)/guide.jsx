@@ -1,3 +1,4 @@
+import { useLocalSearchParams } from 'expo-router';
 import { addDoc, collection, getDocs, query, where } from 'firebase/firestore';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, Modal, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -5,14 +6,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db } from '../(auth)/firebase';
 
 const Guide = () => {
+    const params = useLocalSearchParams();
     const [guides, setGuides] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
     const [isModalVisible, setIsModalVisible] = useState(false);
     const [isDetailsModalVisible, setIsDetailsModalVisible] = useState(false);
     const [selectedGuide, setSelectedGuide] = useState(null);
     const [bookingForm, setBookingForm] = useState({
-        date: '',
-        guests: '1',
+        dates: [], // Changed from single date to multiple dates array
+        guests: '', // Initially empty, user must enter a value
         message: ''
     });
     const [loading, setLoading] = useState(false);
@@ -23,7 +25,12 @@ const Guide = () => {
     const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
 
     const filteredGuides = guides
-        .filter(guide => guide.location.toLowerCase().includes(searchQuery.toLowerCase()))
+        .filter(guide => {
+            const searchLower = searchQuery.toLowerCase();
+            return guide.location.toLowerCase().includes(searchLower) ||
+                   guide.name.toLowerCase().includes(searchLower) ||
+                   (guide.specialties && guide.specialties.toLowerCase().includes(searchLower));
+        })
         .sort((a, b) => {
             const ratingA = parseFloat(a.rating) || 0;
             const ratingB = parseFloat(b.rating) || 0;
@@ -87,6 +94,13 @@ const Guide = () => {
         getGuides();
     }, []);
 
+    // Handle search location from navigation params
+    useEffect(() => {
+        if (params.searchLocation) {
+            setSearchQuery(params.searchLocation);
+        }
+    }, [params.searchLocation]);
+
     const handleBookButtonClick = async (guide) => {
         setSelectedGuide(guide);
         // Fetch booked dates for this guide
@@ -103,8 +117,8 @@ const Guide = () => {
     const handleCloseModal = () => {
         setIsModalVisible(false);
         setBookingForm({
-            date: '',
-            guests: '1',
+            dates: [], // Reset to empty array
+            guests: '', // Reset to empty string
             message: ''
         });
         setShowCustomCalendar(false);
@@ -127,25 +141,28 @@ const Guide = () => {
             return;
         }
 
-        if (!bookingForm.date) {
-            Alert.alert('Error', 'Please select a date for your booking');
+        if (!bookingForm.dates || bookingForm.dates.length === 0) {
+            Alert.alert('Error', 'Please select at least one date for your booking');
             return;
         }
 
-        if (!bookingForm.guests || parseInt(bookingForm.guests) < 1) {
-            Alert.alert('Error', 'Please enter a valid number of guests');
+        const guestCount = parseInt(bookingForm.guests);
+        if (!bookingForm.guests || guestCount < 1 || guestCount > 10) {
+            Alert.alert('Error', 'Please enter a valid number of guests (1-10)');
             return;
         }
 
-        // Double-check if the selected date is available
-        if (bookedDates.includes(bookingForm.date)) {
-            Alert.alert('Error', 'This date is no longer available. Please select a different date.');
+        // Double-check if any selected dates are no longer available
+        const unavailableDates = bookingForm.dates.filter(date => bookedDates.includes(date));
+        if (unavailableDates.length > 0) {
+            Alert.alert('Error', `The following dates are no longer available: ${unavailableDates.join(', ')}. Please select different dates.`);
             return;
         }
 
         setLoading(true);
         try {
-            const totalPrice = selectedGuide.pricePerDay * parseInt(bookingForm.guests);
+            // Price multiplied by number of selected dates
+            const totalPrice = selectedGuide.pricePerDay * bookingForm.dates.length;
             
             // Use userId if available (for approved guides), otherwise fall back to document ID
             const guideId = selectedGuide.userId || selectedGuide.id;
@@ -157,16 +174,16 @@ const Guide = () => {
                 guideId: guideId,
                 guideName: selectedGuide.name,
                 guideLocation: selectedGuide.location,
-                date: bookingForm.date,
-                guests: parseInt(bookingForm.guests),
-                totalPrice: totalPrice,
+                dates: bookingForm.dates, // Multiple dates
+                guests: guestCount,
+                totalPrice: totalPrice, // Price multiplied by number of days
                 pricePerDay: selectedGuide.pricePerDay,
                 message: bookingForm.message,
                 status: 'pending',
                 createdAt: new Date(),
             });
 
-            Alert.alert('Success', 'Booking request sent successfully! The guide will review your request.');
+            Alert.alert('Success', `Booking request sent successfully for ${bookingForm.dates.length} date(s)! The guide will review your request.`);
             handleCloseModal();
         } catch (error) {
             console.error('Error creating booking:', error);
@@ -211,6 +228,12 @@ const Guide = () => {
         return date < today;
     };
 
+    const isDateSelected = (day, month, year) => {
+        if (!day) return false;
+        const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        return bookingForm.dates.includes(dateString);
+    };
+
     const handleDateSelection = (day, month, year) => {
         if (!day) return;
         
@@ -234,8 +257,22 @@ const Guide = () => {
             return;
         }
         
-        setBookingForm({...bookingForm, date: dateString});
-        setShowCustomCalendar(false);
+        // Toggle date selection for multiple dates
+        const currentDates = [...bookingForm.dates];
+        const dateIndex = currentDates.indexOf(dateString);
+        
+        if (dateIndex > -1) {
+            // Date is already selected, remove it
+            currentDates.splice(dateIndex, 1);
+        } else {
+            // Date is not selected, add it
+            currentDates.push(dateString);
+        }
+        
+        // Sort dates chronologically
+        currentDates.sort();
+        
+        setBookingForm({...bookingForm, dates: currentDates});
     };
 
     return (
@@ -378,7 +415,7 @@ const Guide = () => {
                                     {selectedGuide.name} - {selectedGuide.location}
                                 </Text>
                                 <Text style={styles.priceInfo}>
-                                    ৳{selectedGuide.pricePerDay}/day per person
+                                    ৳{selectedGuide.pricePerDay}/day
                                 </Text>
                                 
                                 {bookedDates.length > 0 && (
@@ -397,12 +434,23 @@ const Guide = () => {
                                     onPress={handleDateSelect}
                                 >
                                     <Text style={styles.datePickerText}>
-                                        {bookingForm.date ? `Selected Date: ${bookingForm.date}` : 'Select Date'}
+                                        {bookingForm.dates.length > 0 
+                                            ? `Selected Dates (${bookingForm.dates.length}): ${bookingForm.dates.join(', ')}` 
+                                            : 'Select Dates (Multiple Selection)'}
                                     </Text>
                                 </TouchableOpacity>
                                 
                                 {showCustomCalendar && (
                                     <View style={styles.calendarContainer}>
+                                        <View style={styles.calendarInstructions}>
+                                            <Text style={styles.instructionsText}>
+                                                📅 Tap dates to select/deselect multiple dates
+                                            </Text>
+                                            <Text style={styles.instructionsSubtext}>
+                                                Orange = Booked | Purple = Selected
+                                            </Text>
+                                        </View>
+                                        
                                         <View style={styles.calendarHeader}>
                                             <TouchableOpacity 
                                                 onPress={() => {
@@ -445,7 +493,7 @@ const Guide = () => {
                                             {generateCalendarDays(currentMonth, currentYear).map((day, index) => {
                                                 const isBooked = isDateBooked(day, currentMonth, currentYear);
                                                 const isPast = isDatePast(day, currentMonth, currentYear);
-                                                const isSelected = bookingForm.date === `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                                                const isSelected = isDateSelected(day, currentMonth, currentYear);
                                                 
                                                 return (
                                                     <TouchableOpacity
@@ -473,45 +521,74 @@ const Guide = () => {
                                             })}
                                         </View>
                                         
-                                        <TouchableOpacity 
-                                            style={styles.closeCalendarButton}
-                                            onPress={() => setShowCustomCalendar(false)}
-                                        >
-                                            <Text style={styles.closeCalendarText}>Close</Text>
-                                        </TouchableOpacity>
+                                        <View style={styles.calendarActions}>
+                                            <TouchableOpacity 
+                                                style={styles.clearDatesButton}
+                                                onPress={() => setBookingForm({...bookingForm, dates: []})}
+                                            >
+                                                <Text style={styles.clearDatesText}>Clear All</Text>
+                                            </TouchableOpacity>
+                                            <TouchableOpacity 
+                                                style={styles.closeCalendarButton}
+                                                onPress={() => setShowCustomCalendar(false)}
+                                            >
+                                                <Text style={styles.closeCalendarText}>Done ({bookingForm.dates.length} selected)</Text>
+                                            </TouchableOpacity>
+                                        </View>
                                     </View>
                                 )}
                                 
                                 <TextInput
                                     style={styles.input}
-                                    placeholder="Number of Guests"
+                                    placeholder="Number of Members (Max 10)"
                                     value={bookingForm.guests}
-                                    onChangeText={(text) => setBookingForm({...bookingForm, guests: text})}
+                                    onChangeText={(text) => {
+                                        // Only allow numbers and limit to 10 guests maximum
+                                        const numValue = parseInt(text) || 0;
+                                        if (text === '' || (numValue > 0 && numValue <= 10)) {
+                                            setBookingForm({...bookingForm, guests: text});
+                                        }
+                                    }}
                                     keyboardType="numeric"
+                                    maxLength={2}
                                 />
                                 
                                 <TextInput
                                     style={[styles.input, styles.messageInput]}
-                                    placeholder="Special requests or message (optional)"
+                                    placeholder="Conditions & special requests or message (optional)"
                                     value={bookingForm.message}
                                     onChangeText={(text) => setBookingForm({...bookingForm, message: text})}
                                     multiline
                                     numberOfLines={3}
                                 />
                                 
-                                {bookingForm.guests && selectedGuide.pricePerDay && (
-                                    <Text style={styles.totalPrice}>
-                                        Total: ৳{selectedGuide.pricePerDay * parseInt(bookingForm.guests || 1)}
-                                    </Text>
+                                {bookingForm.guests && parseInt(bookingForm.guests) > 0 && selectedGuide.pricePerDay && (
+                                    <View style={styles.pricingBreakdown}>
+                                        <Text style={styles.pricingLabel}>Pricing Details:</Text>
+                                        <Text style={styles.pricingDetail}>Guide Rate: ৳{selectedGuide.pricePerDay}/day</Text>
+                                        <Text style={styles.pricingDetail}>Number of Members: {bookingForm.guests}</Text>
+                                        {bookingForm.dates.length > 0 && (
+                                            <Text style={styles.pricingDetail}>Selected Dates: {bookingForm.dates.length} day(s)</Text>
+                                        )}
+                                        <Text style={styles.totalPrice}>
+                                            Total Price: ৳{selectedGuide.pricePerDay * (bookingForm.dates.length || 1)}
+                                        </Text>
+                                        <Text style={styles.pricingNote}>
+                                            * Price is calculated per day × number of days selected
+                                        </Text>
+                                    </View>
                                 )}
                             </>
                         )}
                         
                         <View style={styles.buttonContainer}>
                             <TouchableOpacity 
-                                style={[styles.payButton, loading && styles.disabledButton]} 
+                                style={[
+                                    styles.payButton, 
+                                    (loading || !bookingForm.guests || parseInt(bookingForm.guests) < 1 || bookingForm.dates.length === 0) && styles.disabledButton
+                                ]} 
                                 onPress={handleConfirmBooking}
-                                disabled={loading}
+                                disabled={loading || !bookingForm.guests || parseInt(bookingForm.guests) < 1 || bookingForm.dates.length === 0}
                             >
                                 <Text style={styles.payButtonText}>
                                     {loading ? 'Sending...' : 'Confirm Request'}
@@ -922,7 +999,33 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#6200EE',
         textAlign: 'center',
+        marginTop: 5,
+    },
+    pricingBreakdown: {
+        backgroundColor: '#F0F4FF',
+        borderRadius: 12,
+        padding: 15,
         marginVertical: 10,
+        borderWidth: 1,
+        borderColor: '#E8EAED',
+    },
+    pricingLabel: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#333',
+        marginBottom: 8,
+    },
+    pricingDetail: {
+        fontSize: 14,
+        color: '#666',
+        marginBottom: 4,
+    },
+    pricingNote: {
+        fontSize: 12,
+        color: '#999',
+        fontStyle: 'italic',
+        marginTop: 5,
+        textAlign: 'center',
     },
     datePickerButton: {
         backgroundColor: '#F8F9FA',
@@ -1182,6 +1285,26 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.25,
         shadowRadius: 3.84,
     },
+    calendarInstructions: {
+        backgroundColor: '#F8F9FA',
+        borderRadius: 8,
+        padding: 10,
+        marginBottom: 15,
+        borderWidth: 1,
+        borderColor: '#E8EAED',
+    },
+    instructionsText: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#333',
+        textAlign: 'center',
+        marginBottom: 4,
+    },
+    instructionsSubtext: {
+        fontSize: 12,
+        color: '#666',
+        textAlign: 'center',
+    },
     calendarHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -1256,8 +1379,26 @@ const styles = StyleSheet.create({
         color: 'white',
         fontWeight: 'bold',
     },
-    closeCalendarButton: {
+    calendarActions: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
         marginTop: 15,
+        gap: 10,
+    },
+    clearDatesButton: {
+        flex: 1,
+        backgroundColor: '#F44336',
+        padding: 12,
+        borderRadius: 8,
+        alignItems: 'center',
+    },
+    clearDatesText: {
+        color: 'white',
+        fontWeight: 'bold',
+        fontSize: 14,
+    },
+    closeCalendarButton: {
+        flex: 2,
         backgroundColor: '#8B5CF6',
         padding: 12,
         borderRadius: 8,

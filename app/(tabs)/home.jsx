@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
     FlatList,
     Image,
+    Modal,
     RefreshControl,
     ScrollView,
     StyleSheet,
@@ -15,45 +16,69 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { db } from "../(auth)/firebase";
 
-// Popular destinations data
-const POPULAR_PLACES = [
-    {
-        id: "1",
-        name: "Cox's Bazar",
-        image: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=400&q=80",
-        description: "World's longest natural sea beach",
-    },
-    {
-        id: "2",
-        name: "Sundarbans",
-        image: "https://images.unsplash.com/photo-1549068106-b024baf5062d?auto=format&fit=crop&w=400&q=80",
-        description: "Largest mangrove forest",
-    },
-    {
-        id: "3",
-        name: "Sylhet",
-        image: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=400&q=80",
-        description: "Tea gardens and hills",
-    },
-    {
-        id: "4",
-        name: "Bandarban",
-        image: "https://images.unsplash.com/photo-1464822759844-d150baec3657?auto=format&fit=crop&w=400&q=80",
-        description: "Hill district with natural beauty",
-    },
-];
-
 const Home = () => {
     const [searchLocation, setSearchLocation] = useState("");
     const [guides, setGuides] = useState([]);
+    const [places, setPlaces] = useState([]);
     const [filteredGuides, setFilteredGuides] = useState([]);
-    const [filteredPlaces, setFilteredPlaces] = useState(POPULAR_PLACES);
+    const [filteredPlaces, setFilteredPlaces] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
+    
+    // Modal states
+    const [placeModalVisible, setPlaceModalVisible] = useState(false);
+    const [guideModalVisible, setGuideModalVisible] = useState(false);
+    const [selectedPlace, setSelectedPlace] = useState(null);
+    const [selectedGuide, setSelectedGuide] = useState(null);
 
     useEffect(() => {
         fetchGuides();
+        fetchPlaces();
     }, []);
+
+    const fetchPlaces = async () => {
+        try {
+            // Fetch from Firebase locations only
+            const locationsQuery = query(collection(db, "locations"));
+            const locationsSnapshot = await getDocs(locationsQuery);
+            const firebaseLocations = [];
+            
+            locationsSnapshot.forEach((doc) => {
+                const data = doc.data();
+                // Transform Firebase data to match the expected format
+                const transformedLocation = {
+                    id: doc.id,
+                    name: data.name || '',
+                    image: data.image || 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=400&q=80',
+                    description: data.description || '',
+                    rating: parseFloat(data.rating) || 0,
+                    reviews: parseInt(data.reviews) || 0,
+                };
+                firebaseLocations.push(transformedLocation);
+            });
+
+            // Sort by rating first (highest to lowest), then by reviews (most to least)
+            const sortedPlaces = firebaseLocations.sort((a, b) => {
+                // First sort by rating (highest first)
+                if (b.rating !== a.rating) {
+                    return b.rating - a.rating;
+                }
+                // If ratings are same, sort by number of reviews (most reviews first)
+                return b.reviews - a.reviews;
+            });
+
+            // Take top 5 places with highest rating
+            const topPlaces = sortedPlaces.slice(0, 5);
+            setPlaces(topPlaces);
+            setFilteredPlaces(topPlaces);
+            
+        } catch (error) {
+            console.error("Error fetching places:", error);
+            // If Firebase fails, show empty array
+            setPlaces([]);
+            setFilteredPlaces([]);
+        }
+    };
 
     const fetchGuides = async () => {
         try {
@@ -93,6 +118,7 @@ const Home = () => {
     const onRefresh = async () => {
         setRefreshing(true);
         await fetchGuides();
+        await fetchPlaces();
         setRefreshing(false);
     };
 
@@ -101,7 +127,7 @@ const Home = () => {
         
         if (location.trim() === "") {
             // Reset to show all data when search is empty, sorted by rating
-            setFilteredPlaces(POPULAR_PLACES);
+            setFilteredPlaces(places);
             const sortedGuides = [...guides].sort((a, b) => {
                 const ratingA = parseFloat(a.rating) || 0;
                 const ratingB = parseFloat(b.rating) || 0;
@@ -118,10 +144,19 @@ const Home = () => {
             });
             setFilteredGuides(sortedGuides.slice(0, 3));
         } else {
-            // Filter popular places by location
-            const filteredPopularPlaces = POPULAR_PLACES.filter(place =>
-                place.name.toLowerCase().includes(location.toLowerCase())
-            );
+            // Filter popular places by location and maintain rating-based sorting
+            const filteredPopularPlaces = places
+                .filter(place =>
+                    place.name.toLowerCase().includes(location.toLowerCase())
+                )
+                .sort((a, b) => {
+                    // First sort by rating (highest to lowest)
+                    if (b.rating !== a.rating) {
+                        return b.rating - a.rating;
+                    }
+                    // If ratings are same, sort by number of reviews (most reviews first)
+                    return b.reviews - a.reviews;
+                });
             setFilteredPlaces(filteredPopularPlaces);
             
             // Filter guides by location and sort by rating/reviews
@@ -156,20 +191,41 @@ const Home = () => {
         }
     };
 
+    const handlePlacePress = (place) => {
+        setSelectedPlace(place);
+        setPlaceModalVisible(true);
+    };
+
+    const handleGuidePress = (guide) => {
+        setSelectedGuide(guide);
+        setGuideModalVisible(true);
+    };
+
+    const closePlaceModal = () => {
+        setPlaceModalVisible(false);
+        setSelectedPlace(null);
+    };
+
+    const closeGuideModal = () => {
+        setGuideModalVisible(false);
+        setSelectedGuide(null);
+    };
+
     const renderPopularPlace = ({ item }) => (
         <TouchableOpacity
             style={styles.placeCard}
-            onPress={() =>
-                router.push({
-                    pathname: "/place",
-                    params: { placeName: item.name },
-                })
-            }
+            onPress={() => handlePlacePress(item)}
         >
             <Image source={{ uri: item.image }} style={styles.placeImage} />
             <View style={styles.placeOverlay}>
                 <Text style={styles.placeName}>{item.name}</Text>
-                <Text style={styles.placeDescription}>{item.description}</Text>
+                <Text style={styles.placeDescription} numberOfLines={2} ellipsizeMode="tail">
+                    {item.description}
+                </Text>
+                <View style={styles.placeRatingContainer}>
+                    <Text style={styles.placeRating}>⭐ {item.rating}</Text>
+                    <Text style={styles.placeReviews}>({item.reviews} reviews)</Text>
+                </View>
             </View>
         </TouchableOpacity>
     );
@@ -177,12 +233,7 @@ const Home = () => {
     const renderGuide = ({ item }) => (
         <TouchableOpacity
             style={styles.guideCard}
-            onPress={() =>
-                router.push({
-                    pathname: "/guide",
-                    params: { guideId: item.id },
-                })
-            }
+            onPress={() => handleGuidePress(item)}
         >
             <Image source={{ uri: item.image }} style={styles.guideImage} />
             <View style={styles.guideInfo}>
@@ -190,7 +241,7 @@ const Home = () => {
                 <Text style={styles.guideLocation}>{item.location}</Text>
                 <View style={styles.ratingContainer}>
                     <Text style={styles.rating}>⭐ {item.rating || 0}</Text>
-                    <Text style={styles.price}>৳{item.price}/day</Text>
+                    <Text style={styles.price}>৳{item.pricePerDay}/day</Text>
                 </View>
             </View>
         </TouchableOpacity>
@@ -324,6 +375,134 @@ const Home = () => {
                     </View>
                 </View>
             </ScrollView>
+
+            {/* Place Details Modal */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={placeModalVisible}
+                onRequestClose={closePlaceModal}
+            >
+                <View style={styles.modalContainer}>
+                    <View style={styles.modalContent}>
+                        {selectedPlace && (
+                            <>
+                                <View style={styles.modalHeader}>
+                                    <TouchableOpacity 
+                                        style={styles.closeButton}
+                                        onPress={closePlaceModal}
+                                    >
+                                        <Text style={styles.closeButtonText}>✕</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                
+                                <ScrollView showsVerticalScrollIndicator={false}>
+                                    <Image
+                                        style={styles.modalImage}
+                                        source={{ uri: selectedPlace.image }}
+                                    />
+                                    
+                                    <View style={styles.modalDetails}>
+                                        <Text style={styles.modalTitle}>{selectedPlace.name}</Text>
+                                        
+                                        <View style={styles.modalRatingSection}>
+                                            <Text style={styles.modalRating}>⭐ {selectedPlace.rating}</Text>
+                                            <Text style={styles.modalReviews}>({selectedPlace.reviews} reviews)</Text>
+                                        </View>
+                                        
+                                        <Text style={styles.modalSectionTitle}>Description</Text>
+                                        <Text style={styles.modalDescription}>{selectedPlace.description}</Text>
+                                        
+                                        <TouchableOpacity 
+                                            style={styles.exploreButton}
+                                            onPress={() => {
+                                                closePlaceModal();
+                                                router.push({
+                                                    pathname: "/place",
+                                                    params: { placeName: selectedPlace.name },
+                                                });
+                                            }}
+                                        >
+                                            <Text style={styles.exploreButtonText}>Explore More</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </ScrollView>
+                            </>
+                        )}
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Guide Details Modal */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={guideModalVisible}
+                onRequestClose={closeGuideModal}
+            >
+                <View style={styles.modalContainer}>
+                    <View style={styles.modalContent}>
+                        {selectedGuide && (
+                            <>
+                                <View style={styles.modalHeader}>
+                                    <TouchableOpacity 
+                                        style={styles.closeButton}
+                                        onPress={closeGuideModal}
+                                    >
+                                        <Text style={styles.closeButtonText}>✕</Text>
+                                    </TouchableOpacity>
+                                </View>
+                                
+                                <ScrollView showsVerticalScrollIndicator={false}>
+                                    <Image
+                                        style={styles.modalImage}
+                                        source={{ uri: selectedGuide.image }}
+                                    />
+                                    
+                                    <View style={styles.modalDetails}>
+                                        <Text style={styles.modalTitle}>{selectedGuide.name}</Text>
+                                        
+                                        <View style={styles.modalRatingSection}>
+                                            <Text style={styles.modalRating}>⭐ {selectedGuide.rating || 0}</Text>
+                                            <Text style={styles.modalPrice}>৳{selectedGuide.price}/day</Text>
+                                        </View>
+                                        
+                                        <Text style={styles.modalSectionTitle}>Location</Text>
+                                        <Text style={styles.modalLocationText}>{selectedGuide.location}</Text>
+                                        
+                                        {selectedGuide.experience && (
+                                            <>
+                                                <Text style={styles.modalSectionTitle}>Experience</Text>
+                                                <Text style={styles.modalDescription}>{selectedGuide.experience}</Text>
+                                            </>
+                                        )}
+                                        
+                                        {selectedGuide.languages && (
+                                            <>
+                                                <Text style={styles.modalSectionTitle}>Languages</Text>
+                                                <Text style={styles.modalDescription}>{selectedGuide.languages}</Text>
+                                            </>
+                                        )}
+                                        
+                                        <TouchableOpacity 
+                                            style={styles.contactButton}
+                                            onPress={() => {
+                                                closeGuideModal();
+                                                router.push({
+                                                    pathname: "/guide",
+                                                    params: { guideId: selectedGuide.id },
+                                                });
+                                            }}
+                                        >
+                                            <Text style={styles.contactButtonText}>Contact Guide</Text>
+                                        </TouchableOpacity>
+                                    </View>
+                                </ScrollView>
+                            </>
+                        )}
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -451,6 +630,23 @@ const styles = StyleSheet.create({
     placeDescription: {
         color: "#E8EAED",
         fontSize: 12,
+        marginBottom: 6,
+        numberOfLines: 2,
+        lineHeight: 16,
+    },
+    placeRatingContainer: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+    },
+    placeRating: {
+        color: "#FFD700",
+        fontSize: 12,
+        fontWeight: "600",
+    },
+    placeReviews: {
+        color: "#E8EAED",
+        fontSize: 10,
     },
     guideCard: {
         height: 240,
@@ -545,6 +741,115 @@ const styles = StyleSheet.create({
         fontSize: 14,
         paddingVertical: 20,
         fontStyle: "italic",
+    },
+    // Modal Styles
+    modalContainer: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.5)",
+        justifyContent: "flex-end",
+    },
+    modalContent: {
+        backgroundColor: "#FFFFFF",
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        maxHeight: "90%",
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 10,
+        elevation: 10,
+    },
+    modalHeader: {
+        flexDirection: "row",
+        justifyContent: "flex-end",
+        padding: 16,
+        paddingBottom: 0,
+    },
+    closeButton: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: "#F3F4F6",
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    closeButtonText: {
+        fontSize: 18,
+        fontWeight: "bold",
+        color: "#6B7280",
+    },
+    modalImage: {
+        width: "100%",
+        height: 200,
+    },
+    modalDetails: {
+        padding: 20,
+    },
+    modalTitle: {
+        fontSize: 24,
+        fontWeight: "bold",
+        color: "#111827",
+        marginBottom: 12,
+    },
+    modalRatingSection: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: 16,
+    },
+    modalRating: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: "#F59E0B",
+    },
+    modalReviews: {
+        fontSize: 14,
+        color: "#6B7280",
+    },
+    modalPrice: {
+        fontSize: 16,
+        fontWeight: "bold",
+        color: "#6200EE",
+    },
+    modalSectionTitle: {
+        fontSize: 18,
+        fontWeight: "600",
+        color: "#111827",
+        marginTop: 16,
+        marginBottom: 8,
+    },
+    modalDescription: {
+        fontSize: 16,
+        lineHeight: 24,
+        color: "#4B5563",
+    },
+    modalLocationText: {
+        fontSize: 16,
+        color: "#6B7280",
+    },
+    exploreButton: {
+        backgroundColor: "#6200EE",
+        borderRadius: 12,
+        paddingVertical: 16,
+        alignItems: "center",
+        marginTop: 24,
+    },
+    exploreButtonText: {
+        color: "#FFFFFF",
+        fontSize: 16,
+        fontWeight: "600",
+    },
+    contactButton: {
+        backgroundColor: "#059669",
+        borderRadius: 12,
+        paddingVertical: 16,
+        alignItems: "center",
+        marginTop: 24,
+    },
+    contactButtonText: {
+        color: "#FFFFFF",
+        fontSize: 16,
+        fontWeight: "600",
     },
 });
 

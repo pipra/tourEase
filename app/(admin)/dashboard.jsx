@@ -40,6 +40,8 @@ const DEFAULT_PLACES = [
         language: 'Bengali',
         currency: 'BDT',
         image: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=400&q=80',
+        rating: 0,
+        reviews: 0,
         isDefault: true,
     },
     {
@@ -53,6 +55,8 @@ const DEFAULT_PLACES = [
         language: 'Bengali',
         currency: 'BDT',
         image: 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?auto=format&fit=crop&w=400&q=80',
+        rating: 0,
+        reviews: 0,
         isDefault: true,
     },
     {
@@ -66,6 +70,8 @@ const DEFAULT_PLACES = [
         language: 'Bengali',
         currency: 'BDT',
         image: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=400&q=80',
+        rating: 0,
+        reviews: 0,
         isDefault: true,
     },
     {
@@ -79,6 +85,8 @@ const DEFAULT_PLACES = [
         language: 'Bengali',
         currency: 'BDT',
         image: 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=400&q=80',
+        rating: 0,
+        reviews: 0,
         isDefault: true,
     },
     {
@@ -92,6 +100,8 @@ const DEFAULT_PLACES = [
         language: 'Bengali',
         currency: 'BDT',
         image: 'https://images.unsplash.com/photo-1439066615861-d1af74d74000?auto=format&fit=crop&w=400&q=80',
+        rating: 0,
+        reviews: 0,
         isDefault: true,
     },
     {
@@ -105,6 +115,8 @@ const DEFAULT_PLACES = [
         language: 'Bengali',
         currency: 'BDT',
         image: 'https://images.unsplash.com/photo-1559827260-dc66d52bef19?auto=format&fit=crop&w=400&q=80',
+        rating: 0,
+        reviews: 0,
         isDefault: true,
     },
 ];
@@ -130,6 +142,7 @@ const AdminDashboard = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [locationForm, setLocationForm] = useState({
         name: '',
+        placeName: '',
         description: '',
         category: '',
         attractions: '',
@@ -256,6 +269,7 @@ const AdminDashboard = () => {
                 const transformedLocation = {
                     id: doc.id,
                     name: data.name || '',
+                    placeName: data.placeName || '',
                     description: data.description || '',
                     category: data.category || 'Other',
                     attractions: Array.isArray(data.attractions) ? data.attractions : 
@@ -265,6 +279,8 @@ const AdminDashboard = () => {
                     language: data.language || 'Local',
                     currency: data.currency || 'Local currency',
                     image: data.image || 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=400&q=80',
+                    rating: data.rating || 0,
+                    reviews: data.reviews || 0,
                     isDefault: false,
                     createdAt: data.createdAt,
                     updatedAt: data.updatedAt,
@@ -414,12 +430,15 @@ const AdminDashboard = () => {
 
             await setDoc(doc(collection(db, 'locations')), {
                 ...locationForm,
+                rating: 0,
+                reviews: 0,
                 createdAt: new Date(),
                 updatedAt: new Date(),
             });
 
             setLocationForm({
                 name: '',
+                placeName: '',
                 description: '',
                 category: '',
                 attractions: '',
@@ -580,6 +599,9 @@ const AdminDashboard = () => {
                         </View>
                     )}
                 </View>
+                {item.placeName && (
+                    <Text style={styles.placeNameText}>📍 {item.placeName}</Text>
+                )}
                 <Text style={styles.itemSubtitle}>{item.category} | {item.language}</Text>
                 <Text style={styles.itemMeta}>
                     Best Time: {item.bestTimeToVisit} | Temp: {item.averageTemperature}
@@ -932,8 +954,14 @@ const AdminDashboard = () => {
                         <ScrollView style={styles.locationFormScroll}>
                             <TextInput
                                 style={styles.locationInput}
-                                placeholder="Location Name *"
+                                placeholder="Place Name (e.g., Cox's Bazar Sea Beach)"
                                 value={locationForm.name}
+                                onChangeText={(text) => setLocationForm({...locationForm, placeName: text})}
+                            />
+                            <TextInput
+                                style={styles.locationInput}
+                                placeholder="Location Name *"
+                                value={locationForm.placeName}
                                 onChangeText={(text) => setLocationForm({...locationForm, name: text})}
                             />
                             <TextInput
@@ -1179,6 +1207,12 @@ const styles = StyleSheet.create({
         fontSize: 10,
         fontWeight: '600',
         color: '#2E7D2E',
+    },
+    placeNameText: {
+        fontSize: 13,
+        color: '#6200EE',
+        fontWeight: '500',
+        marginBottom: 3,
     },
     attractionsText: {
         fontSize: 11,

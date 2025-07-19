@@ -29,6 +29,7 @@ const GuideSignup = () => {
         specialties: '',
         bio: '',
         pricePerDay: '',
+        imageUrl: '',
     });
     const [loading, setLoading] = useState(false);
 
@@ -125,7 +126,7 @@ const GuideSignup = () => {
                 appliedAt: new Date(),
                 rating: 0,
                 reviews: 0,
-                image: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=400&q=80',
+                image: formData.imageUrl || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=400&q=80',
             });
 
             Alert.alert(
@@ -265,6 +266,29 @@ const GuideSignup = () => {
                         textAlignVertical="top"
                     />
 
+                    <Text style={styles.sectionTitle}>Profile Picture</Text>
+                    
+                    <TextInput
+                        style={styles.input}
+                        placeholder="Profile Image URL (optional)"
+                        value={formData.imageUrl}
+                        onChangeText={(value) => handleInputChange('imageUrl', value)}
+                        autoCapitalize="none"
+                    />
+                    
+                    {formData.imageUrl && (
+                        <View style={styles.imagePreviewContainer}>
+                            <Text style={styles.imagePreviewTitle}>Profile Picture Preview:</Text>
+                            <Image
+                                source={{ uri: formData.imageUrl }}
+                                style={styles.imagePreview}
+                                onError={() => {
+                                    Alert.alert('Invalid Image URL', 'Please enter a valid image URL');
+                                }}
+                            />
+                        </View>
+                    )}
+
                     <View style={styles.infoBox}>
                         <Text style={styles.infoTitle}>📋 Application Process</Text>
                         <Text style={styles.infoText}>
@@ -365,6 +389,32 @@ const styles = StyleSheet.create({
     textArea: {
         height: 100,
         textAlignVertical: 'top',
+    },
+    imagePreviewContainer: {
+        alignItems: 'center',
+        marginBottom: 20,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 8,
+        padding: 15,
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+    },
+    imagePreviewTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#333',
+        marginBottom: 10,
+    },
+    imagePreview: {
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        borderWidth: 3,
+        borderColor: '#6200EE',
+        backgroundColor: '#f0f0f0',
     },
     infoBox: {
         backgroundColor: '#E3F2FD',
