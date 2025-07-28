@@ -5,6 +5,7 @@ import {
     collection,
     doc,
     getDocs,
+    onSnapshot,
     query,
     updateDoc,
     where,
@@ -25,6 +26,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db } from '../(auth)/firebase';
+import newBookingService from '../../utils/newBookingService';
 
 const GuideDashboard = () => {
     const [activeTab, setActiveTab] = useState('profile');
@@ -37,6 +39,10 @@ const GuideDashboard = () => {
     const [editForm, setEditForm] = useState({});
     const [customerDetailsModalVisible, setCustomerDetailsModalVisible] = useState(false);
     const [selectedBooking, setSelectedBooking] = useState(null);
+    const [newBookingModalVisible, setNewBookingModalVisible] = useState(false);
+    const [newBookings, setNewBookings] = useState([]);
+    const [currentNewBookingIndex, setCurrentNewBookingIndex] = useState(0);
+    const [initialLoadComplete, setInitialLoadComplete] = useState(false);
     const [stats, setStats] = useState({
         totalBookings: 0,
         pendingBookings: 0,
@@ -130,6 +136,104 @@ const GuideDashboard = () => {
         fetchData();
     }, [fetchData]);
 
+    // Real-time booking listener
+    useEffect(() => {
+        let unsubscribe = null; // Declare the variable in this scope
+        
+        const setupBookingListener = async () => {
+            try {
+                const user = auth.currentUser;
+                if (!user) return;
+
+                // Get guide document ID first
+                const guideQuery = query(
+                    collection(db, 'guides'),
+                    where('userId', '==', user.uid)
+                );
+                const guideSnapshot = await getDocs(guideQuery);
+                let guideDocId = user.uid;
+                if (!guideSnapshot.empty) {
+                    guideDocId = guideSnapshot.docs[0].id;
+                }
+
+                // Set up real-time listener for bookings
+                const bookingsQuery = query(
+                    collection(db, 'bookings'),
+                    where('guideId', 'in', [user.uid, guideDocId])
+                );
+
+                unsubscribe = onSnapshot(bookingsQuery, async (snapshot) => {
+                    // Skip the initial load to avoid showing existing bookings as "new"
+                    if (!initialLoadComplete) {
+                        setInitialLoadComplete(true);
+                        return;
+                    }
+
+                    const currentBookings = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data(),
+                    }));
+
+                    // Check for truly new bookings
+                    const newBookingsList = await newBookingService.checkForNewBookings(currentBookings, user.uid);
+                    
+                    if (newBookingsList.length > 0) {
+                        console.log(`Real-time: Found ${newBookingsList.length} new booking(s)`);
+                        setNewBookings(newBookingsList);
+                        setCurrentNewBookingIndex(0);
+                        setNewBookingModalVisible(true);
+                    }
+
+                    // Update the bookings state for the dashboard
+                    const sortedBookings = currentBookings.sort((a, b) => {
+                        const dateA = a.createdAt ? new Date(a.createdAt.seconds * 1000) : new Date(0);
+                        const dateB = b.createdAt ? new Date(b.createdAt.seconds * 1000) : new Date(0);
+                        
+                        if (dateA.getTime() !== dateB.getTime()) {
+                            return dateB.getTime() - dateA.getTime();
+                        }
+                        
+                        const bookingDateA = a.date ? new Date(a.date) : new Date(0);
+                        const bookingDateB = b.date ? new Date(b.date) : new Date(0);
+                        return bookingDateB.getTime() - bookingDateA.getTime();
+                    });
+
+                    setBookings(sortedBookings);
+
+                    // Update stats
+                    const totalBookings = sortedBookings.length;
+                    const pendingBookings = sortedBookings.filter(b => b.status === 'pending').length;
+                    const confirmedBookings = sortedBookings.filter(b => b.status === 'confirmed').length;
+                    const totalEarnings = sortedBookings
+                        .filter(b => b.status === 'confirmed')
+                        .reduce((sum, b) => sum + (b.totalPrice || 0), 0);
+
+                    setStats(prevStats => ({
+                        ...prevStats,
+                        totalBookings,
+                        pendingBookings,
+                        confirmedBookings,
+                        totalEarnings,
+                    }));
+                }, (error) => {
+                    console.error('Error in booking listener:', error);
+                });
+
+            } catch (error) {
+                console.error('Error setting up booking listener:', error);
+            }
+        };
+
+        setupBookingListener();
+
+        // Cleanup on unmount
+        return () => {
+            if (unsubscribe) {
+                unsubscribe();
+            }
+        };
+    }, [initialLoadComplete]); // Include initialLoadComplete in dependencies
+
     // Auto-refresh when screen comes into focus
     useFocusEffect(
         useCallback(() => {
@@ -203,6 +307,98 @@ const GuideDashboard = () => {
                 },
             ]
         );
+    };
+
+    // Handle new booking modal actions
+    const handleNewBookingResponse = async (bookingId, action) => {
+        try {
+            if (action === 'accept') {
+                await handleBookingStatusUpdate(bookingId, 'confirmed');
+            } else if (action === 'reject') {
+                await handleBookingStatusUpdate(bookingId, 'cancelled');
+            }
+            
+            // Mark this booking as notified
+            const user = auth.currentUser;
+            if (user) {
+                await newBookingService.markBookingsAsNotified([bookingId], user.uid);
+            }
+            
+            // Move to next booking or close modal
+            if (currentNewBookingIndex < newBookings.length - 1) {
+                setCurrentNewBookingIndex(currentNewBookingIndex + 1);
+            } else {
+                setNewBookingModalVisible(false);
+                setNewBookings([]);
+                setCurrentNewBookingIndex(0);
+            }
+        } catch (error) {
+            console.error('Error handling new booking response:', error);
+            Alert.alert('Error', 'Failed to process booking request');
+        }
+    };
+
+    const handleViewNewBookingDetails = () => {
+        const currentBooking = newBookings[currentNewBookingIndex];
+        setSelectedBooking(currentBooking);
+        setNewBookingModalVisible(false);
+        setCustomerDetailsModalVisible(true);
+    };
+
+    const handleSkipNewBooking = async () => {
+        try {
+            const currentBooking = newBookings[currentNewBookingIndex];
+            const user = auth.currentUser;
+            if (user && currentBooking) {
+                await newBookingService.markBookingsAsNotified([currentBooking.id], user.uid);
+            }
+            
+            // Move to next booking or close modal
+            if (currentNewBookingIndex < newBookings.length - 1) {
+                setCurrentNewBookingIndex(currentNewBookingIndex + 1);
+            } else {
+                setNewBookingModalVisible(false);
+                setNewBookings([]);
+                setCurrentNewBookingIndex(0);
+            }
+        } catch (error) {
+            console.error('Error skipping new booking:', error);
+        }
+    };
+
+    const handleCloseNewBookingModal = async () => {
+        try {
+            // Mark all remaining bookings as notified
+            const user = auth.currentUser;
+            if (user && newBookings.length > 0) {
+                const remainingBookingIds = newBookings.slice(currentNewBookingIndex).map(b => b.id);
+                await newBookingService.markBookingsAsNotified(remainingBookingIds, user.uid);
+            }
+            
+            setNewBookingModalVisible(false);
+            setNewBookings([]);
+            setCurrentNewBookingIndex(0);
+        } catch (error) {
+            console.error('Error closing new booking modal:', error);
+        }
+    };
+
+    // Test function to simulate new booking (for testing)
+    const testNewBookingModal = () => {
+        const testBooking = {
+            id: 'test-booking-' + Date.now(),
+            userName: 'John Doe',
+            userEmail: 'john@example.com',
+            guests: 3,
+            totalPrice: 2500,
+            status: 'pending',
+            date: '2025-08-01',
+            message: 'Looking forward to exploring Dhaka with your guidance! We are interested in historical sites and local food.'
+        };
+        
+        setNewBookings([testBooking]);
+        setCurrentNewBookingIndex(0);
+        setNewBookingModalVisible(true);
     };
 
     // Function to get filtered bookings based on category
@@ -520,9 +716,17 @@ const GuideDashboard = () => {
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
                 <Text style={styles.headerTitle}>Guide Dashboard</Text>
-                <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-                    <Text style={styles.logoutText}>Logout</Text>
-                </TouchableOpacity>
+                <View style={styles.headerActions}>
+                    {/* <TouchableOpacity 
+                        onPress={testNewBookingModal} 
+                        style={[styles.logoutButton, { backgroundColor: '#FF9800', marginRight: 10 }]}
+                    >
+                        <Text style={styles.logoutText}>🔔</Text>
+                    </TouchableOpacity> */}
+                    <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+                        <Text style={styles.logoutText}>Logout</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
 
             <View style={styles.tabContainer}>
@@ -889,6 +1093,126 @@ const GuideDashboard = () => {
                     </View>
                 </View>
             </Modal>
+
+            {/* New Booking Notification Modal */}
+            <Modal
+                visible={newBookingModalVisible}
+                animationType="fade"
+                transparent={true}
+                onRequestClose={handleCloseNewBookingModal}
+            >
+                <View style={styles.newBookingModalOverlay}>
+                    <View style={styles.newBookingModalContent}>
+                        {newBookings.length > 0 && currentNewBookingIndex < newBookings.length && (
+                            <>
+                                <View style={styles.newBookingHeader}>
+                                    <Text style={styles.newBookingTitle}>🎉 New Booking Request!</Text>
+                                    <TouchableOpacity 
+                                        style={styles.newBookingCloseButton}
+                                        onPress={handleCloseNewBookingModal}
+                                    >
+                                        <Text style={styles.newBookingCloseText}>✕</Text>
+                                    </TouchableOpacity>
+                                </View>
+
+                                {newBookings.length > 1 && (
+                                    <Text style={styles.newBookingCounter}>
+                                        {currentNewBookingIndex + 1} of {newBookings.length} new requests
+                                    </Text>
+                                )}
+
+                                <View style={styles.newBookingDetails}>
+                                    <View style={styles.newBookingRow}>
+                                        <Text style={styles.newBookingIcon}>👤</Text>
+                                        <Text style={styles.newBookingText}>
+                                            <Text style={styles.newBookingLabel}>Customer: </Text>
+                                            {newBookings[currentNewBookingIndex]?.userName}
+                                        </Text>
+                                    </View>
+
+                                    <View style={styles.newBookingRow}>
+                                        <Text style={styles.newBookingIcon}>📅</Text>
+                                        <Text style={styles.newBookingText}>
+                                            <Text style={styles.newBookingLabel}>Date: </Text>
+                                            {(() => {
+                                                const booking = newBookings[currentNewBookingIndex];
+                                                if (Array.isArray(booking?.dates) && booking.dates.length > 0) {
+                                                    return booking.dates.length > 1 
+                                                        ? `${booking.dates[0]} to ${booking.dates[booking.dates.length - 1]} (${booking.dates.length} days)`
+                                                        : booking.dates[0];
+                                                } else if (booking?.date) {
+                                                    return booking.date;
+                                                } else {
+                                                    return 'Date TBD';
+                                                }
+                                            })()}
+                                        </Text>
+                                    </View>
+
+                                    <View style={styles.newBookingRow}>
+                                        <Text style={styles.newBookingIcon}>👥</Text>
+                                        <Text style={styles.newBookingText}>
+                                            <Text style={styles.newBookingLabel}>Guests: </Text>
+                                            {newBookings[currentNewBookingIndex]?.guests} people
+                                        </Text>
+                                    </View>
+
+                                    <View style={styles.newBookingRow}>
+                                        <Text style={styles.newBookingIcon}>💰</Text>
+                                        <Text style={styles.newBookingText}>
+                                            <Text style={styles.newBookingLabel}>Amount: </Text>
+                                            ৳{newBookings[currentNewBookingIndex]?.totalPrice}
+                                        </Text>
+                                    </View>
+
+                                    {newBookings[currentNewBookingIndex]?.message && (
+                                        <View style={styles.newBookingMessageContainer}>
+                                            <Text style={styles.newBookingMessageLabel}>Message:</Text>
+                                            <Text style={styles.newBookingMessage}>
+                                                &ldquo;{newBookings[currentNewBookingIndex].message}&rdquo;
+                                            </Text>
+                                        </View>
+                                    )}
+                                </View>
+
+                                <View style={styles.newBookingActions}>
+                                    <TouchableOpacity
+                                        style={[styles.newBookingButton, styles.acceptButton]}
+                                        onPress={() => handleNewBookingResponse(newBookings[currentNewBookingIndex]?.id, 'accept')}
+                                    >
+                                        <Text style={styles.newBookingButtonText}>✓ Accept</Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        style={[styles.newBookingButton, styles.newBookingRejectButton]}
+                                        onPress={() => handleNewBookingResponse(newBookings[currentNewBookingIndex]?.id, 'reject')}
+                                    >
+                                        <Text style={styles.newBookingButtonText}>✗ Reject</Text>
+                                    </TouchableOpacity>
+                                </View>
+
+                                <View style={styles.newBookingSecondaryActions}>
+                                    <TouchableOpacity
+                                        style={styles.newBookingSecondaryButton}
+                                        onPress={handleViewNewBookingDetails}
+                                    >
+                                        <Text style={styles.newBookingSecondaryButtonText}>View Full Details</Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        style={styles.newBookingSecondaryButton}
+                                        onPress={handleSkipNewBooking}
+                                    >
+                                        <Text style={styles.newBookingSecondaryButtonText}>
+                                            {newBookings.length > 1 ? 'Skip & Next' : 'Decide Later'}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </>
+                        )}
+                    </View>
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -918,6 +1242,10 @@ const styles = StyleSheet.create({
         fontSize: 24,
         fontWeight: 'bold',
         color: '#FFFFFF',
+    },
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
     },
     logoutButton: {
         backgroundColor: 'rgba(255, 255, 255, 0.2)',
@@ -1516,6 +1844,141 @@ const styles = StyleSheet.create({
     },
     activeCategoryCountText: {
         color: '#FFFFFF',
+    },
+
+    // New Booking Modal Styles
+    newBookingModalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    newBookingModalContent: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 20,
+        padding: 25,
+        width: '100%',
+        maxWidth: 400,
+        elevation: 10,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 5 },
+        shadowOpacity: 0.3,
+        shadowRadius: 10,
+    },
+    newBookingHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 15,
+    },
+    newBookingTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#333',
+        flex: 1,
+    },
+    newBookingCloseButton: {
+        backgroundColor: '#f0f0f0',
+        borderRadius: 15,
+        width: 30,
+        height: 30,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    newBookingCloseText: {
+        fontSize: 16,
+        color: '#666',
+        fontWeight: 'bold',
+    },
+    newBookingCounter: {
+        fontSize: 14,
+        color: '#666',
+        textAlign: 'center',
+        marginBottom: 20,
+        fontStyle: 'italic',
+    },
+    newBookingDetails: {
+        marginBottom: 25,
+    },
+    newBookingRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    newBookingIcon: {
+        fontSize: 18,
+        marginRight: 12,
+        width: 25,
+    },
+    newBookingText: {
+        fontSize: 16,
+        color: '#333',
+        flex: 1,
+    },
+    newBookingLabel: {
+        fontWeight: 'bold',
+        color: '#555',
+    },
+    newBookingMessageContainer: {
+        backgroundColor: '#f8f9fa',
+        borderRadius: 10,
+        padding: 15,
+        marginTop: 10,
+    },
+    newBookingMessageLabel: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: '#555',
+        marginBottom: 5,
+    },
+    newBookingMessage: {
+        fontSize: 14,
+        color: '#666',
+        fontStyle: 'italic',
+        lineHeight: 20,
+    },
+    newBookingActions: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 15,
+        gap: 10,
+    },
+    newBookingButton: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 25,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    acceptButton: {
+        backgroundColor: '#4CAF50',
+    },
+    newBookingRejectButton: {
+        backgroundColor: '#f44336',
+    },
+    newBookingButtonText: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    newBookingSecondaryActions: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        gap: 10,
+    },
+    newBookingSecondaryButton: {
+        flex: 1,
+        paddingVertical: 10,
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#f0f0f0',
+    },
+    newBookingSecondaryButtonText: {
+        color: '#666',
+        fontSize: 14,
+        fontWeight: '600',
     },
 });
 

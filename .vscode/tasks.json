@@ -1,0 +1,13 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Start TourEase App",
+			"type": "shell",
+			"command": "npx expo start",
+			"isBackground": true,
+			"group": "build",
+			"problemMatcher": []
+		}
+	]
+}
