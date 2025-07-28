@@ -1,7 +1,7 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect } from 'expo-router';
-import { addDoc, collection, doc, getDoc, getDocs, query, updateDoc, where } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
 import {
     Alert,
@@ -17,6 +17,7 @@ import {
     View
 } from 'react-native';
 import { auth, db } from '../(auth)/firebase';
+import { bookingStatusService } from '../../utils/bookingStatusService';
 
 export default function Profile() {
     const [userData, setUserData] = useState(null);
@@ -31,12 +32,74 @@ export default function Profile() {
     const [editProfileModalVisible, setEditProfileModalVisible] = useState(false);
     const [editedUserData, setEditedUserData] = useState({});
     const [profileImageUri, setProfileImageUri] = useState(null);
+    
+    // Booking status notification states
+    const [statusChangeModalVisible, setStatusChangeModalVisible] = useState(false);
+    const [statusChanges, setStatusChanges] = useState([]);
+    const [currentStatusChangeIndex, setCurrentStatusChangeIndex] = useState(0);
+    const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
     useEffect(() => {
         fetchUserDetails();
         fetchUserBookings();
         fetchUserReviews();
     }, []);
+
+    // Real-time listener for booking status changes
+    useEffect(() => {
+        let unsubscribe = null;
+        
+        const setupBookingStatusListener = async () => {
+            try {
+                const user = auth.currentUser;
+                if (!user) return;
+
+                // Set up real-time listener for user's bookings
+                const bookingsQuery = query(
+                    collection(db, 'bookings'),
+                    where('userId', '==', user.uid)
+                );
+
+                unsubscribe = onSnapshot(bookingsQuery, async (snapshot) => {
+                    const userBookings = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data(),
+                    }));
+
+                    if (!initialLoadComplete) {
+                        // First load - initialize tracking without notifications
+                        await bookingStatusService.initializeStatusTracking(userBookings, user.uid);
+                        setInitialLoadComplete(true);
+                        return;
+                    }
+
+                    // Check for status changes
+                    const statusChangesList = await bookingStatusService.checkForStatusChanges(userBookings, user.uid);
+                    
+                    if (statusChangesList.length > 0) {
+                        console.log(`Real-time: Found ${statusChangesList.length} booking status change(s)`);
+                        setStatusChanges(statusChangesList);
+                        setCurrentStatusChangeIndex(0);
+                        setStatusChangeModalVisible(true);
+                    }
+                }, (error) => {
+                    console.error('Error in booking status listener:', error);
+                });
+
+            } catch (error) {
+                console.error('Error setting up booking status listener:', error);
+            }
+        };
+
+        setupBookingStatusListener();
+
+        // Cleanup on unmount
+        return () => {
+            if (unsubscribe) {
+                unsubscribe();
+            }
+        };
+    }, [initialLoadComplete]);
 
     // Refresh data when the screen comes into focus (e.g., after booking a guide)
     useFocusEffect(
@@ -962,6 +1025,109 @@ export default function Profile() {
                             </View>
                         </View>
                     </Modal>
+
+                    {/* Booking Status Change Modal */}
+                    <Modal
+                        visible={statusChangeModalVisible}
+                        animationType="slide"
+                        transparent={true}
+                        onRequestClose={() => setStatusChangeModalVisible(false)}
+                    >
+                        <View style={styles.modalOverlay}>
+                            <View style={styles.modalContent}>
+                                {statusChanges.length > 0 && (
+                                    <>
+                                        <View style={styles.statusChangeHeader}>
+                                            <Text style={styles.modalTitle}>
+                                                {statusChanges[currentStatusChangeIndex]?.statusChangeType === 'approved' ? '✅ Booking Approved!' : '❌ Booking Rejected'}
+                                            </Text>
+                                            {statusChanges.length > 1 && (
+                                                <Text style={styles.statusChangeCounter}>
+                                                    {currentStatusChangeIndex + 1} of {statusChanges.length}
+                                                </Text>
+                                            )}
+                                        </View>
+
+                                        <View style={styles.statusChangeContent}>
+                                            <View style={styles.statusChangeInfo}>
+                                                <Text style={styles.statusChangeGuide}>
+                                                    Guide: {statusChanges[currentStatusChangeIndex]?.guideName}
+                                                </Text>
+                                                <Text style={styles.statusChangeLocation}>
+                                                    📍 {statusChanges[currentStatusChangeIndex]?.location}
+                                                </Text>
+                                                <Text style={styles.statusChangeDate}>
+                                                    📅 {(() => {
+                                                        const booking = statusChanges[currentStatusChangeIndex];
+                                                        const date = booking?.date || booking?.dates || booking?.bookingDate;
+                                                        
+                                                        if (!date) {
+                                                            return 'Date TBD';
+                                                        }
+                                                        
+                                                        // If it's an array of dates (multiple days booking)
+                                                        if (Array.isArray(date)) {
+                                                            if (date.length === 1) {
+                                                                return date[0];
+                                                            } else if (date.length > 1) {
+                                                                return `${date[0]} - ${date[date.length - 1]} (${date.length} days)`;
+                                                            } else {
+                                                                return 'Date TBD';
+                                                            }
+                                                        }
+                                                        
+                                                        // If it's a single date string
+                                                        return date;
+                                                    })()}
+                                                </Text>
+                                                {statusChanges[currentStatusChangeIndex]?.totalPrice && (
+                                                    <Text style={styles.statusChangePrice}>
+                                                        💰 ৳{statusChanges[currentStatusChangeIndex]?.totalPrice}
+                                                    </Text>
+                                                )}
+                                            </View>
+
+                                            <View style={styles.statusChangeMessage}>
+                                                <Text style={[
+                                                    styles.statusMessage,
+                                                    { color: statusChanges[currentStatusChangeIndex]?.statusChangeType === 'approved' ? '#2E7D2E' : '#C62828' }
+                                                ]}>
+                                                    {statusChanges[currentStatusChangeIndex]?.statusChangeType === 'approved' 
+                                                        ? 'Your booking has been approved by the guide! You can now proceed with your tour.'
+                                                        : 'Unfortunately, your booking has been rejected by the guide. You can try booking with other guides.'
+                                                    }
+                                                </Text>
+                                            </View>
+                                        </View>
+
+                                        <View style={styles.statusChangeActions}>
+                                            {statusChanges.length > 1 && currentStatusChangeIndex < statusChanges.length - 1 ? (
+                                                <TouchableOpacity
+                                                    style={styles.nextButton}
+                                                    onPress={() => setCurrentStatusChangeIndex(currentStatusChangeIndex + 1)}
+                                                >
+                                                    <Text style={styles.nextButtonText}>Next ({statusChanges.length - currentStatusChangeIndex - 1} more)</Text>
+                                                </TouchableOpacity>
+                                            ) : (
+                                                <TouchableOpacity
+                                                    style={styles.okButton}
+                                                    onPress={() => {
+                                                        setStatusChangeModalVisible(false);
+                                                        setStatusChanges([]);
+                                                        setCurrentStatusChangeIndex(0);
+                                                        // Refresh bookings to show updated status
+                                                        fetchUserBookings();
+                                                    }}
+                                                >
+                                                    <Text style={styles.okButtonText}>OK</Text>
+                                                </TouchableOpacity>
+                                            )}
+                                        </View>
+                                    </>
+                                )}
+                            </View>
+                        </View>
+                    </Modal>
                 </>
             ) : (
                 <View style={styles.loadingContainer}>
@@ -1643,5 +1809,87 @@ const styles = StyleSheet.create({
         fontSize: 16,
         marginBottom: 15,
         width: '100%',
+    },
+    // Booking Status Change Modal Styles
+    statusChangeHeader: {
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    statusChangeCounter: {
+        fontSize: 14,
+        color: '#666',
+        marginTop: 5,
+    },
+    statusChangeContent: {
+        marginBottom: 25,
+    },
+    statusChangeInfo: {
+        backgroundColor: '#f8f9fa',
+        padding: 15,
+        borderRadius: 10,
+        marginBottom: 15,
+    },
+    statusChangeGuide: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#333',
+        marginBottom: 8,
+    },
+    statusChangeLocation: {
+        fontSize: 16,
+        color: '#666',
+        marginBottom: 5,
+    },
+    statusChangeDate: {
+        fontSize: 16,
+        color: '#666',
+        marginBottom: 5,
+    },
+    statusChangePrice: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#6200EE',
+    },
+    statusChangeMessage: {
+        backgroundColor: '#f0f8ff',
+        padding: 15,
+        borderRadius: 10,
+        borderLeftWidth: 4,
+        borderLeftColor: '#6200EE',
+    },
+    statusMessage: {
+        fontSize: 16,
+        lineHeight: 22,
+        textAlign: 'center',
+    },
+    statusChangeActions: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+    },
+    nextButton: {
+        backgroundColor: '#6200EE',
+        paddingHorizontal: 30,
+        paddingVertical: 12,
+        borderRadius: 25,
+        minWidth: 120,
+    },
+    nextButtonText: {
+        color: 'white',
+        fontSize: 16,
+        fontWeight: 'bold',
+        textAlign: 'center',
+    },
+    okButton: {
+        backgroundColor: '#2E7D2E',
+        paddingHorizontal: 40,
+        paddingVertical: 12,
+        borderRadius: 25,
+        minWidth: 120,
+    },
+    okButtonText: {
+        color: 'white',
+        fontSize: 16,
+        fontWeight: 'bold',
+        textAlign: 'center',
     },
 });
