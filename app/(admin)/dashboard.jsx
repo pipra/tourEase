@@ -27,100 +27,6 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db } from '../(auth)/firebase';
 
-// Default places data (existing places)
-const DEFAULT_PLACES = [
-    {
-        id: 'default-1',
-        name: "Cox's Bazar",
-        description: "World's longest natural sea beach with 120km of sandy coastline",
-        category: 'Beach',
-        attractions: ['Longest sea beach', 'Sunset views', 'Water sports', 'Fresh seafood'],
-        bestTimeToVisit: 'November - March',
-        averageTemperature: '25-30°C',
-        language: 'Bengali',
-        currency: 'BDT',
-        image: 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=400&q=80',
-        rating: 0,
-        reviews: 0,
-        isDefault: true,
-    },
-    {
-        id: 'default-2',
-        name: 'Sundarbans',
-        description: 'Largest mangrove forest in the world, home to Royal Bengal Tigers',
-        category: 'Forest',
-        attractions: ['Royal Bengal Tigers', 'Mangrove ecosystem', 'Boat safari', 'Wildlife photography'],
-        bestTimeToVisit: 'October - March',
-        averageTemperature: '20-28°C',
-        language: 'Bengali',
-        currency: 'BDT',
-        image: 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?auto=format&fit=crop&w=400&q=80',
-        rating: 0,
-        reviews: 0,
-        isDefault: true,
-    },
-    {
-        id: 'default-3',
-        name: 'Sylhet',
-        description: 'Tea capital of Bangladesh with rolling hills and tea gardens',
-        category: 'Hills',
-        attractions: ['Tea gardens', 'Jaflong', 'Ratargul swamp forest', 'Seven-layer tea'],
-        bestTimeToVisit: 'October - April',
-        averageTemperature: '18-25°C',
-        language: 'Bengali',
-        currency: 'BDT',
-        image: 'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=400&q=80',
-        rating: 0,
-        reviews: 0,
-        isDefault: true,
-    },
-    {
-        id: 'default-4',
-        name: 'Bandarban',
-        description: 'Hill district with highest peaks and indigenous communities',
-        category: 'Hills',
-        attractions: ['Keokradong peak', 'Nilgiri', 'Tribal culture', 'Cloud watching'],
-        bestTimeToVisit: 'October - March',
-        averageTemperature: '15-22°C',
-        language: 'Bengali',
-        currency: 'BDT',
-        image: 'https://images.unsplash.com/photo-1544735716-392fe2489ffa?auto=format&fit=crop&w=400&q=80',
-        rating: 0,
-        reviews: 0,
-        isDefault: true,
-    },
-    {
-        id: 'default-5',
-        name: 'Rangamati',
-        description: 'Lake city with beautiful Kaptai Lake and tribal heritage',
-        category: 'Lake',
-        attractions: ['Kaptai Lake', 'Hanging bridge', 'Tribal museums', 'Boat rides'],
-        bestTimeToVisit: 'October - March',
-        averageTemperature: '18-28°C',
-        language: 'Bengali',
-        currency: 'BDT',
-        image: 'https://images.unsplash.com/photo-1439066615861-d1af74d74000?auto=format&fit=crop&w=400&q=80',
-        rating: 0,
-        reviews: 0,
-        isDefault: true,
-    },
-    {
-        id: 'default-6',
-        name: "Saint Martin's Island",
-        description: "Bangladesh's only coral island with pristine beaches",
-        category: 'Island',
-        attractions: ['Coral island', 'Clear blue water', 'Coconut trees', 'Marine life'],
-        bestTimeToVisit: 'November - February',
-        averageTemperature: '24-30°C',
-        language: 'Bengali',
-        currency: 'BDT',
-        image: 'https://images.unsplash.com/photo-1559827260-dc66d52bef19?auto=format&fit=crop&w=400&q=80',
-        rating: 0,
-        reviews: 0,
-        isDefault: true,
-    },
-];
-
 const AdminDashboard = () => {
     const [activeTab, setActiveTab] = useState('overview');
     const [users, setUsers] = useState([]);
@@ -134,12 +40,14 @@ const AdminDashboard = () => {
         totalGuides: 0,
         totalBookings: 0,
         pendingBookings: 0,
+        confirmedBookings: 0,
         pendingGuideApplications: 0,
     });
     const [selectedItem, setSelectedItem] = useState(null);
     const [modalVisible, setModalVisible] = useState(false);
     const [locationModalVisible, setLocationModalVisible] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [bookingStatusFilter, setBookingStatusFilter] = useState('all');
     const [locationForm, setLocationForm] = useState({
         name: '',
         placeName: '',
@@ -289,22 +197,23 @@ const AdminDashboard = () => {
             });
 
             // Combine default places with Firebase locations
-            const allLocations = [...DEFAULT_PLACES, ...firebaseLocations];
+            const allLocations = [...firebaseLocations];
             setLocations(allLocations);
         } catch (error) {
             console.error('Error fetching locations:', error);
             // If Firebase fails, still show default places
-            setLocations(DEFAULT_PLACES);
+            // setLocations(DEFAULT_PLACES);
         }
     };
 
     const fetchStats = async () => {
         try {
-            const [usersSnap, guidesSnap, bookingsSnap, pendingSnap, pendingApplicationsSnap] = await Promise.all([
+            const [usersSnap, guidesSnap, bookingsSnap, pendingSnap, confirmedSnap, pendingApplicationsSnap] = await Promise.all([
                 getCountFromServer(collection(db, 'Users')),
                 getCountFromServer(collection(db, 'guides')),
                 getCountFromServer(collection(db, 'bookings')),
-                getCountFromServer(query(collection(db, 'bookings'), where('status', '==', 'Pending'))),
+                getCountFromServer(query(collection(db, 'bookings'), where('status', '==', 'pending'))),
+                getCountFromServer(query(collection(db, 'bookings'), where('status', '==', 'confirmed'))),
                 getCountFromServer(query(collection(db, 'guide-applications'), where('status', '==', 'pending'))),
             ]);
 
@@ -313,6 +222,7 @@ const AdminDashboard = () => {
                 totalGuides: guidesSnap.data().count,
                 totalBookings: bookingsSnap.data().count,
                 pendingBookings: pendingSnap.data().count,
+                confirmedBookings: confirmedSnap.data().count,
                 pendingGuideApplications: pendingApplicationsSnap.data().count,
             });
         } catch (_error) {
@@ -341,20 +251,6 @@ const AdminDashboard = () => {
                 },
             ]
         );
-    };
-
-    const handleUpdateBookingStatus = async (bookingId, newStatus) => {
-        try {
-            await updateDoc(doc(db, 'bookings', bookingId), {
-                status: newStatus,
-                updatedAt: new Date(),
-            });
-            fetchBookings();
-            fetchStats();
-            Alert.alert('Success', 'Booking status updated');
-        } catch (_error) {
-            Alert.alert('Error', 'Failed to update booking status');
-        }
     };
 
     const handleApproveGuideApplication = async (applicationId, applicationData) => {
@@ -543,35 +439,54 @@ const AdminDashboard = () => {
         </View>
     );
 
-    const renderBookingItem = ({ item }) => (
-        <View style={styles.listItem}>
-            <View style={styles.itemInfo}>
-                <Text style={styles.itemTitle}>{item.userName} → {item.guideName}</Text>
-                <Text style={styles.itemSubtitle}>{item.guideLocation}</Text>
-                <Text style={styles.itemMeta}>
-                    Date: {item.date} | Status: {item.status} | ৳{item.price}
-                </Text>
+    const renderBookingItem = ({ item }) => {
+        const getStatusIcon = (status) => {
+            switch (status) {
+                case 'pending': return '⏳';
+                case 'confirmed': return '✅';
+                case 'cancelled': return '❌';
+                default: return '📋';
+            }
+        };
+
+        const getStatusColor = (status) => {
+            switch (status) {
+                case 'pending': return '#F44336';
+                case 'confirmed': return '#4CAF50';
+                case 'cancelled': return '#FF9800';
+                default: return '#666';
+            }
+        };
+
+        return (
+            <View style={styles.listItem}>
+                <View style={styles.itemInfo}>
+                    <Text style={styles.itemTitle}>{item.userName} → {item.guideName}</Text>
+                    <Text style={styles.itemSubtitle}>{item.guideLocation}</Text>
+                    <Text style={styles.itemMeta}>
+                        Date: {item.date} | ৳{item.price}
+                    </Text>
+                    <View style={styles.statusContainer}>
+                        <Text style={styles.statusIcon}>{getStatusIcon(item.status)}</Text>
+                        <Text style={[styles.statusText, { color: getStatusColor(item.status) }]}>
+                            {item.status.toUpperCase()}
+                        </Text>
+                    </View>
+                </View>
+                <View style={styles.itemActions}>
+                    <TouchableOpacity
+                        style={[styles.actionButton, styles.viewButton]}
+                        onPress={() => {
+                            setSelectedItem(item);
+                            setModalVisible(true);
+                        }}
+                    >
+                        <Text style={styles.actionButtonText}>View</Text>
+                    </TouchableOpacity>
+                </View>
             </View>
-            <View style={styles.itemActions}>
-                {item.status === 'Pending' && (
-                    <>
-                        <TouchableOpacity
-                            style={[styles.actionButton, styles.approveButton]}
-                            onPress={() => handleUpdateBookingStatus(item.id, 'Confirmed')}
-                        >
-                            <Text style={styles.actionButtonText}>Approve</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.actionButton, styles.rejectButton]}
-                            onPress={() => handleUpdateBookingStatus(item.id, 'Rejected')}
-                        >
-                            <Text style={styles.actionButtonText}>Reject</Text>
-                        </TouchableOpacity>
-                    </>
-                )}
-            </View>
-        </View>
-    );
+        );
+    };
 
     const renderReviewItem = ({ item }) => (
         <View style={styles.listItem}>
@@ -697,10 +612,12 @@ const AdminDashboard = () => {
             application.location?.toLowerCase().includes(searchQuery.toLowerCase())
         );
 
-        const filteredBookings = bookings.filter(booking =>
-            booking.userName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            booking.guideName?.toLowerCase().includes(searchQuery.toLowerCase())
-        );
+        const filteredBookings = bookings.filter(booking => {
+            const matchesSearch = booking.userName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                 booking.guideName?.toLowerCase().includes(searchQuery.toLowerCase());
+            const matchesStatus = bookingStatusFilter === 'all' || booking.status === bookingStatusFilter;
+            return matchesSearch && matchesStatus;
+        });
 
         switch (activeTab) {
             case 'overview':
@@ -708,12 +625,13 @@ const AdminDashboard = () => {
                     <ScrollView style={styles.tabContent}>
                         <Text style={styles.tabTitle}>Dashboard Overview</Text>
                         <View style={styles.statsContainer}>
-                            {renderStatCard('Total Users', stats.totalUsers, '#4CAF50')}
-                            {renderStatCard('Total Guides', stats.totalGuides, '#2196F3')}
+                            {renderStatCard('Total Users', stats.totalUsers, '#2196F3')}
+                            {renderStatCard('Total Guides', stats.totalGuides, '#9C27B0')}
                             {renderStatCard('Total Bookings', stats.totalBookings, '#FF9800')}
                             {renderStatCard('Pending Bookings', stats.pendingBookings, '#F44336')}
-                            {renderStatCard('Pending Applications', stats.pendingGuideApplications, '#9C27B0')}
-                            {renderStatCard('Total Locations', locations.length, '#795548')}
+                            {renderStatCard('Confirmed Bookings', stats.confirmedBookings, '#4CAF50')}
+                            {renderStatCard('Pending Applications', stats.pendingGuideApplications, '#795548')}
+                            {renderStatCard('Total Locations', locations.length, '#607D8B')}
                         </View>
                         
                         <Text style={styles.sectionTitle}>Recent Activity</Text>
@@ -721,10 +639,11 @@ const AdminDashboard = () => {
                             <Text style={styles.activityItem}>📊 {stats.totalBookings} total bookings received</Text>
                             <Text style={styles.activityItem}>👥 {stats.totalUsers} users registered</Text>
                             <Text style={styles.activityItem}>🗺️ {stats.totalGuides} guides available</Text>
-                            <Text style={styles.activityItem}>⏳ {stats.pendingBookings} bookings awaiting approval</Text>
+                            <Text style={styles.activityItem}>⏳ {stats.pendingBookings} bookings pending review</Text>
+                            <Text style={styles.activityItem}>✅ {stats.confirmedBookings} bookings confirmed</Text>
                             <Text style={styles.activityItem}>📋 {stats.pendingGuideApplications} guide applications pending</Text>
                             <Text style={styles.activityItem}>
-                                📍 {locations.length} total locations ({DEFAULT_PLACES.length} default + {locations.length - DEFAULT_PLACES.length} admin-added)
+                                📍 {locations.length} total locations ({locations.length} admin-added)
                             </Text>
                         </View>
                         
@@ -793,12 +712,49 @@ const AdminDashboard = () => {
             case 'bookings':
                 return (
                     <View style={styles.tabContent}>
-                        <Text style={styles.tabTitle}>Booking Management</Text>
+                        <Text style={styles.tabTitle}>Booking Overview</Text>
+                        
+                        {/* Status Filter */}
+                        <View style={styles.filterContainer}>
+                            <Text style={styles.filterLabel}>Filter by Status:</Text>
+                            <View style={styles.statusFilterContainer}>
+                                {[
+                                    { key: 'all', label: 'All', color: '#666' },
+                                    { key: 'pending', label: 'Pending', color: '#F44336' },
+                                    { key: 'confirmed', label: 'Confirmed', color: '#4CAF50' },
+                                    { key: 'cancelled', label: 'Cancelled', color: '#FF9800' },
+                                ].map((status) => (
+                                    <TouchableOpacity
+                                        key={status.key}
+                                        style={[
+                                            styles.statusFilterButton,
+                                            bookingStatusFilter === status.key && styles.activeStatusFilter,
+                                            { borderColor: status.color }
+                                        ]}
+                                        onPress={() => setBookingStatusFilter(status.key)}
+                                    >
+                                        <Text
+                                            style={[
+                                                styles.statusFilterText,
+                                                bookingStatusFilter === status.key && styles.activeStatusFilterText,
+                                                { color: bookingStatusFilter === status.key ? '#FFFFFF' : status.color }
+                                            ]}
+                                        >
+                                            {status.label}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        </View>
+                        
                         <FlatList
                             data={filteredBookings}
                             renderItem={renderBookingItem}
                             keyExtractor={(item) => item.id}
                             showsVerticalScrollIndicator={false}
+                            ListEmptyComponent={
+                                <Text style={styles.emptyState}>No bookings found for the selected filter</Text>
+                            }
                         />
                     </View>
                 );
@@ -1404,6 +1360,59 @@ const styles = StyleSheet.create({
     modalButtonText: {
         color: '#FFFFFF',
         fontSize: 16,
+        fontWeight: '600',
+    },
+    
+    // Status Filter Styles
+    filterContainer: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 8,
+        padding: 15,
+        marginBottom: 15,
+        elevation: 2,
+    },
+    filterLabel: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#333',
+        marginBottom: 10,
+    },
+    statusFilterContainer: {
+        flexDirection: 'row',
+        flexWrap: 'wrap',
+        gap: 8,
+    },
+    statusFilterButton: {
+        paddingHorizontal: 15,
+        paddingVertical: 8,
+        borderRadius: 20,
+        borderWidth: 1,
+        backgroundColor: '#FFFFFF',
+    },
+    activeStatusFilter: {
+        backgroundColor: '#6200EE',
+        borderColor: '#6200EE',
+    },
+    statusFilterText: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    activeStatusFilterText: {
+        color: '#FFFFFF',
+    },
+    
+    // Status Display Styles
+    statusContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 5,
+    },
+    statusIcon: {
+        fontSize: 16,
+        marginRight: 5,
+    },
+    statusText: {
+        fontSize: 12,
         fontWeight: '600',
     },
 });

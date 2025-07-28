@@ -93,6 +93,14 @@ const GuideDashboard = () => {
                     return bookingDateB.getTime() - bookingDateA.getTime();
                 });
             setBookings(bookingsData);
+            
+            // Debug: Log booking data structure
+            console.log('Fetched bookings:', bookingsData);
+            if (bookingsData.length > 0) {
+                console.log('First booking structure:', bookingsData[0]);
+                console.log('First booking dates:', bookingsData[0].dates);
+                console.log('First booking date:', bookingsData[0].date);
+            }
 
             // Calculate stats directly here
             const totalBookings = bookingsData.length;
@@ -145,6 +153,14 @@ const GuideDashboard = () => {
     };
 
     const handleShowCustomerDetails = (booking) => {
+        console.log('=== BOOKING DETAILS DEBUG ===');
+        console.log('Full booking object:', JSON.stringify(booking, null, 2));
+        console.log('booking.dates:', booking.dates);
+        console.log('booking.date:', booking.date);
+        console.log('typeof booking.dates:', typeof booking.dates);
+        console.log('Array.isArray(booking.dates):', Array.isArray(booking.dates));
+        console.log('booking.dates length:', booking.dates?.length);
+        console.log('=== END DEBUG ===');
         setSelectedBooking(booking);
         setCustomerDetailsModalVisible(true);
     };
@@ -195,12 +211,19 @@ const GuideDashboard = () => {
         const currentDate = now.toISOString().split('T')[0];
         
         const filtered = bookings.filter(booking => {
-            const bookingDate = booking.date;
-            const isPastDate = bookingDate < currentDate;
+            // Handle both single date and multiple dates
+            let isPastDate = false;
+            
+            if (Array.isArray(booking.dates) && booking.dates.length > 0) {
+                // For multiple dates, consider expired if all dates are past
+                isPastDate = booking.dates.every(date => date < currentDate);
+            } else if (booking.date) {
+                isPastDate = booking.date < currentDate;
+            }
             
             switch(bookingCategory) {
                 case 'pending':
-                    return booking.status === 'pending' && !isPastDate;
+                    return booking.status === 'pending'; // Show all pending regardless of date
                 case 'accepted':
                     return booking.status === 'confirmed' && !isPastDate;
                 case 'cancelled':
@@ -214,8 +237,39 @@ const GuideDashboard = () => {
 
         // Sort bookings based on category
         return filtered.sort((a, b) => {
-            const dateA = new Date(a.date);
-            const dateB = new Date(b.date);
+            // Get the primary date for comparison (first date if multiple, or single date)
+            const dateA = Array.isArray(a.dates) && a.dates.length > 0 
+                ? new Date(a.dates[0]) 
+                : new Date(a.date);
+            const dateB = Array.isArray(b.dates) && b.dates.length > 0 
+                ? new Date(b.dates[0]) 
+                : new Date(b.date);
+            
+            const now = new Date();
+            const currentDate = now.toISOString().split('T')[0];
+            
+            // For pending bookings, prioritize current/future dates over past dates
+            if (bookingCategory === 'pending') {
+                const aIsPast = Array.isArray(a.dates) && a.dates.length > 0 
+                    ? a.dates.every(date => date < currentDate)
+                    : a.date < currentDate;
+                const bIsPast = Array.isArray(b.dates) && b.dates.length > 0 
+                    ? b.dates.every(date => date < currentDate)
+                    : b.date < currentDate;
+                
+                // If one is past and other is not, prioritize the non-past one
+                if (aIsPast && !bIsPast) return 1;
+                if (!aIsPast && bIsPast) return -1;
+                
+                // If both are past or both are current/future, sort by date
+                if (aIsPast && bIsPast) {
+                    // For past dates, show most recent first
+                    return dateB - dateA;
+                } else {
+                    // For current/future dates, show earliest first
+                    return dateA - dateB;
+                }
+            }
             
             // For cancelled bookings, show latest dates first
             if (bookingCategory === 'cancelled') {
@@ -226,48 +280,102 @@ const GuideDashboard = () => {
         });
     };
 
-    const renderBookingItem = ({ item }) => (
-        <TouchableOpacity 
-            style={styles.bookingCard}
-            onPress={() => handleShowCustomerDetails(item)}
-            activeOpacity={0.7}
-        >
-            <View style={styles.bookingHeader}>
-                <Text style={styles.bookingTitle}>{item.userName}</Text>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
-                    <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
+    const renderBookingItem = ({ item }) => {
+        const now = new Date();
+        const currentDate = now.toISOString().split('T')[0];
+        
+        // Handle both single date and multiple dates
+        let bookingDate = item.date;
+        let isPastDate = false;
+        
+        if (Array.isArray(item.dates) && item.dates.length > 0) {
+            // For multiple dates, use the earliest date to determine if expired
+            bookingDate = item.dates[0];
+            isPastDate = item.dates.every(date => date < currentDate);
+        } else if (item.date) {
+            isPastDate = bookingDate < currentDate;
+        }
+        
+        return (
+            <TouchableOpacity 
+                style={[
+                    styles.bookingCard,
+                    isPastDate && item.status === 'pending' && styles.expiredBookingCard
+                ]}
+                onPress={() => handleShowCustomerDetails(item)}
+                activeOpacity={0.7}
+            >
+                <View style={styles.bookingHeader}>
+                    <Text style={styles.bookingTitle}>{item.userName}</Text>
+                    <View style={styles.statusContainer}>
+                        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item.status) }]}>
+                            <Text style={styles.statusText}>{item.status.toUpperCase()}</Text>
+                        </View>
+                        {isPastDate && item.status === 'pending' && (
+                            <View style={styles.expiredBadge}>
+                                <Text style={styles.expiredText}>EXPIRED</Text>
+                            </View>
+                        )}
+                    </View>
                 </View>
-            </View>
-            
-            <Text style={styles.bookingDetail}>📅 {item.date}</Text>
-            <Text style={styles.bookingDetail}>👥 {item.guests} guests</Text>
-            <Text style={styles.bookingDetail}>💰 ৳{item.totalPrice}</Text>
-            <Text style={styles.bookingDetail}>📧 {item.userEmail}</Text>
-            
-            {item.status === 'pending' && (
-                <View style={styles.bookingActions}>
-                    <TouchableOpacity
-                        style={[styles.actionButton, styles.confirmButton]}
-                        onPress={(e) => {
-                            e.stopPropagation();
-                            handleBookingStatusUpdate(item.id, 'confirmed');
-                        }}
-                    >
-                        <Text style={styles.actionButtonText}>Confirm</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={[styles.actionButton, styles.rejectButton]}
-                        onPress={(e) => {
-                            e.stopPropagation();
-                            handleBookingStatusUpdate(item.id, 'cancelled');
-                        }}
-                    >
-                        <Text style={styles.actionButtonText}>Reject</Text>
-                    </TouchableOpacity>
-                </View>
-            )}
-        </TouchableOpacity>
-    );
+                
+                <Text style={[
+                    styles.bookingDetail,
+                    isPastDate && item.status === 'pending' && styles.expiredText
+                ]}>
+                    📅 {(() => {
+                        if (Array.isArray(item.dates) && item.dates.length > 0) {
+                            return item.dates.join(', ');
+                        } else if (item.date) {
+                            return item.date;
+                        } else {
+                            return 'No date specified';
+                        }
+                    })()} {isPastDate && item.status === 'pending' && '(Past Date)'}
+                </Text>
+                <Text style={styles.bookingDetail}>👥 {item.guests} guests</Text>
+                <Text style={styles.bookingDetail}>💰 ৳{item.totalPrice}</Text>
+                <Text style={styles.bookingDetail}>📧 {item.userEmail}</Text>
+                
+                {item.status === 'pending' && (
+                    <View style={styles.bookingActions}>
+                        <TouchableOpacity
+                            style={[
+                                styles.actionButton, 
+                                styles.confirmButton,
+                                isPastDate && styles.disabledButton
+                            ]}
+                            onPress={(e) => {
+                                e.stopPropagation();
+                                if (!isPastDate) {
+                                    handleBookingStatusUpdate(item.id, 'confirmed');
+                                }
+                            }}
+                            disabled={isPastDate}
+                        >
+                            <Text style={[
+                                styles.actionButtonText,
+                                isPastDate && styles.disabledButtonText
+                            ]}>
+                                {isPastDate ? 'Expired' : 'Confirm'}
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.actionButton, styles.rejectButton]}
+                            onPress={(e) => {
+                                e.stopPropagation();
+                                handleBookingStatusUpdate(item.id, 'cancelled');
+                            }}
+                        >
+                            <Text style={styles.actionButtonText}>
+                                {isPastDate ? 'Remove' : 'Reject'}
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+            </TouchableOpacity>
+        );
+    };
 
     const renderProfileTab = () => (
         <ScrollView style={styles.profileContainer} showsVerticalScrollIndicator={false}>
@@ -460,12 +568,20 @@ const GuideDashboard = () => {
                                 const count = bookings.filter(booking => {
                                     const now = new Date();
                                     const currentDate = now.toISOString().split('T')[0];
-                                    const bookingDate = booking.date;
-                                    const isPastDate = bookingDate < currentDate;
+                                    
+                                    // Handle both single date and multiple dates
+                                    let isPastDate = false;
+                                    
+                                    if (Array.isArray(booking.dates) && booking.dates.length > 0) {
+                                        // For multiple dates, consider expired if all dates are past
+                                        isPastDate = booking.dates.every(date => date < currentDate);
+                                    } else if (booking.date) {
+                                        isPastDate = booking.date < currentDate;
+                                    }
                                     
                                     switch(category.key) {
                                         case 'pending':
-                                            return booking.status === 'pending' && !isPastDate;
+                                            return booking.status === 'pending'; // Show all pending regardless of date
                                         case 'accepted':
                                             return booking.status === 'confirmed' && !isPastDate;
                                         case 'cancelled':
@@ -609,14 +725,18 @@ const GuideDashboard = () => {
                                     </TouchableOpacity>
                                 </View>
 
-                                <View style={styles.customerInfoCard}>
-                                    <View style={styles.customerInfoRow}>
-                                        <Text style={styles.customerInfoIcon}>👤</Text>
-                                        <View style={styles.customerInfoContent}>
-                                            <Text style={styles.customerInfoLabel}>Customer Name</Text>
-                                            <Text style={styles.customerInfoValue}>{selectedBooking.userName}</Text>
+                                <ScrollView 
+                                    style={styles.customerInfoScrollView}
+                                    showsVerticalScrollIndicator={false}
+                                >
+                                    <View style={styles.customerInfoCard}>
+                                        <View style={styles.customerInfoRow}>
+                                            <Text style={styles.customerInfoIcon}>👤</Text>
+                                            <View style={styles.customerInfoContent}>
+                                                <Text style={styles.customerInfoLabel}>Customer Name</Text>
+                                                <Text style={styles.customerInfoValue}>{selectedBooking.userName}</Text>
+                                            </View>
                                         </View>
-                                    </View>
 
                                     <View style={styles.customerInfoRow}>
                                         <Text style={styles.customerInfoIcon}>📧</Text>
@@ -629,8 +749,26 @@ const GuideDashboard = () => {
                                     <View style={styles.customerInfoRow}>
                                         <Text style={styles.customerInfoIcon}>📅</Text>
                                         <View style={styles.customerInfoContent}>
-                                            <Text style={styles.customerInfoLabel}>Booking Date</Text>
-                                            <Text style={styles.customerInfoValue}>{selectedBooking.date}</Text>
+                                            <Text style={styles.customerInfoLabel}>
+                                                {selectedBooking.dates && Array.isArray(selectedBooking.dates) && selectedBooking.dates.length > 1 
+                                                    ? 'Booking Dates' 
+                                                    : 'Booking Date'}
+                                            </Text>
+                                            <Text style={styles.customerInfoValue}>
+                                                {selectedBooking.dates && Array.isArray(selectedBooking.dates) && selectedBooking.dates.length > 0 
+                                                    ? selectedBooking.dates.join(', ') 
+                                                    : selectedBooking.date || 'No date specified'}
+                                            </Text>
+                                            {Array.isArray(selectedBooking.dates) && selectedBooking.dates.length > 1 && (
+                                                <Text style={styles.customerInfoSubValue}>
+                                                    Total: {selectedBooking.dates.length} day{selectedBooking.dates.length !== 1 ? 's' : ''}
+                                                </Text>
+                                            )}
+                                            {selectedBooking.pricePerDay && (
+                                                <Text style={styles.customerInfoSubValue}>
+                                                    Rate: ৳{selectedBooking.pricePerDay}/day
+                                                </Text>
+                                            )}
                                         </View>
                                     </View>
 
@@ -671,28 +809,79 @@ const GuideDashboard = () => {
                                             </View>
                                         </View>
                                     )}
+
+                                    {selectedBooking.message && (
+                                        <View style={styles.customerInfoRow}>
+                                            <Text style={styles.customerInfoIcon}>💬</Text>
+                                            <View style={styles.customerInfoContent}>
+                                                <Text style={styles.customerInfoLabel}>Customer Message</Text>
+                                                <Text style={styles.customerInfoValue}>
+                                                    {selectedBooking.message}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    )}
                                 </View>
+                                </ScrollView>
 
                                 {selectedBooking.status === 'pending' && (
                                     <View style={styles.customerModalActions}>
-                                        <TouchableOpacity
-                                            style={[styles.customerActionButton, styles.customerConfirmButton]}
-                                            onPress={() => {
-                                                handleBookingStatusUpdate(selectedBooking.id, 'confirmed');
-                                                handleCloseCustomerDetails();
-                                            }}
-                                        >
-                                            <Text style={styles.customerActionButtonText}>✓ Confirm Booking</Text>
-                                        </TouchableOpacity>
-                                        <TouchableOpacity
-                                            style={[styles.customerActionButton, styles.customerRejectButton]}
-                                            onPress={() => {
-                                                handleBookingStatusUpdate(selectedBooking.id, 'cancelled');
-                                                handleCloseCustomerDetails();
-                                            }}
-                                        >
-                                            <Text style={styles.customerActionButtonText}>✗ Reject Booking</Text>
-                                        </TouchableOpacity>
+                                        {(() => {
+                                            const now = new Date();
+                                            const currentDate = now.toISOString().split('T')[0];
+                                            
+                                            // Handle both single date and multiple dates
+                                            let isPastDate = false;
+                                            
+                                            if (Array.isArray(selectedBooking.dates) && selectedBooking.dates.length > 0) {
+                                                // For multiple dates, consider expired if all dates are past
+                                                isPastDate = selectedBooking.dates.every(date => date < currentDate);
+                                            } else if (selectedBooking.date) {
+                                                isPastDate = selectedBooking.date < currentDate;
+                                            }
+                                            
+                                            if (isPastDate) {
+                                                return (
+                                                    <>
+                                                        <View style={[styles.customerActionButton, styles.expiredNotice]}>
+                                                            <Text style={styles.expiredNoticeText}>⚠️ This booking request has expired (past date)</Text>
+                                                        </View>
+                                                        <TouchableOpacity
+                                                            style={[styles.customerActionButton, styles.customerRejectButton]}
+                                                            onPress={() => {
+                                                                handleBookingStatusUpdate(selectedBooking.id, 'cancelled');
+                                                                handleCloseCustomerDetails();
+                                                            }}
+                                                        >
+                                                            <Text style={styles.customerActionButtonText}>✗ Remove Request</Text>
+                                                        </TouchableOpacity>
+                                                    </>
+                                                );
+                                            } else {
+                                                return (
+                                                    <>
+                                                        <TouchableOpacity
+                                                            style={[styles.customerActionButton, styles.customerConfirmButton]}
+                                                            onPress={() => {
+                                                                handleBookingStatusUpdate(selectedBooking.id, 'confirmed');
+                                                                handleCloseCustomerDetails();
+                                                            }}
+                                                        >
+                                                            <Text style={styles.customerActionButtonText}>✓ Confirm Booking</Text>
+                                                        </TouchableOpacity>
+                                                        <TouchableOpacity
+                                                            style={[styles.customerActionButton, styles.customerRejectButton]}
+                                                            onPress={() => {
+                                                                handleBookingStatusUpdate(selectedBooking.id, 'cancelled');
+                                                                handleCloseCustomerDetails();
+                                                            }}
+                                                        >
+                                                            <Text style={styles.customerActionButtonText}>✗ Reject Booking</Text>
+                                                        </TouchableOpacity>
+                                                    </>
+                                                );
+                                            }
+                                        })()}
                                     </View>
                                 )}
                             </>
@@ -795,6 +984,35 @@ const styles = StyleSheet.create({
         paddingHorizontal: 8,
         paddingVertical: 4,
         borderRadius: 12,
+    },
+    statusContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    expiredBookingCard: {
+        backgroundColor: '#FFF8F0',
+        borderLeftWidth: 4,
+        borderLeftColor: '#FF9800',
+        opacity: 0.9,
+    },
+    expiredBadge: {
+        backgroundColor: '#FF9800',
+        paddingHorizontal: 6,
+        paddingVertical: 3,
+        borderRadius: 8,
+    },
+    expiredText: {
+        color: '#FF9800',
+        fontSize: 10,
+        fontWeight: 'bold',
+    },
+    disabledButton: {
+        backgroundColor: '#CCCCCC',
+        opacity: 0.6,
+    },
+    disabledButtonText: {
+        color: '#666666',
     },
     statusText: {
         color: '#FFFFFF',
@@ -1142,6 +1360,10 @@ const styles = StyleSheet.create({
     customerInfoCard: {
         padding: 20,
     },
+    customerInfoScrollView: {
+        maxHeight: 400,
+        flexGrow: 1,
+    },
     customerInfoRow: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -1168,6 +1390,12 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#333',
         fontWeight: '600',
+    },
+    customerInfoSubValue: {
+        fontSize: 14,
+        color: '#666',
+        fontStyle: 'italic',
+        marginTop: 2,
     },
     statusBadgeModal: {
         paddingHorizontal: 12,
@@ -1210,6 +1438,19 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontSize: 15,
         fontWeight: '600',
+    },
+    expiredNotice: {
+        backgroundColor: '#FFF3CD',
+        borderWidth: 1,
+        borderColor: '#FF9800',
+        flex: 2,
+        marginRight: 8,
+    },
+    expiredNoticeText: {
+        color: '#856404',
+        fontSize: 13,
+        fontWeight: '600',
+        textAlign: 'center',
     },
     
     // Category Filter Styles

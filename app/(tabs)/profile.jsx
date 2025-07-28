@@ -89,11 +89,34 @@ export default function Profile() {
                 
                 querySnapshot.forEach((doc) => {
                     const bookingData = { id: doc.id, ...doc.data() };
+                    
+                    // Debug: Log booking data to see what fields are available
+                    console.log('Booking data:', {
+                        id: bookingData.id,
+                        date: bookingData.date,
+                        dates: bookingData.dates,
+                        bookingDate: bookingData.bookingDate,
+                        status: bookingData.status
+                    });
+                    
                     bookingData.hasReview = reviewedBookingIds.has(doc.id);
                     
                     // Categorize booking based on status and date
                     const currentDate = new Date();
-                    const bookingDate = bookingData.date ? new Date(bookingData.date) : null;
+                    
+                    // Handle different date field possibilities
+                    let bookingDate = null;
+                    const dateField = bookingData.date || bookingData.dates || bookingData.bookingDate;
+                    
+                    if (dateField) {
+                        if (Array.isArray(dateField)) {
+                            // For multiple dates, use the last date to determine if booking is in the past
+                            bookingDate = dateField.length > 0 ? new Date(dateField[dateField.length - 1]) : null;
+                        } else {
+                            bookingDate = new Date(dateField);
+                        }
+                    }
+                    
                     const status = (bookingData.status || 'pending').toLowerCase().trim();
                     
                     // Determine category
@@ -150,8 +173,21 @@ export default function Profile() {
         
         // Sort filtered bookings based on category
         return filtered.sort((a, b) => {
-            const dateA = a.date ? new Date(a.date) : new Date(0);
-            const dateB = b.date ? new Date(b.date) : new Date(0);
+            // Handle different date field possibilities for both items
+            const getDateFromItem = (item) => {
+                const dateField = item.date || item.dates || item.bookingDate;
+                if (!dateField) return new Date(0);
+                
+                if (Array.isArray(dateField)) {
+                    // For multiple dates, use the first date for sorting
+                    return dateField.length > 0 ? new Date(dateField[0]) : new Date(0);
+                } else {
+                    return new Date(dateField);
+                }
+            };
+            
+            const dateA = getDateFromItem(a);
+            const dateB = getDateFromItem(b);
             
             // For cancelled bookings, show latest dates first (big dates first)
             if (bookingFilter === 'cancelled') {
@@ -226,9 +262,20 @@ export default function Profile() {
             }
 
             // Check if tour date has completed
-            const tourDate = new Date(selectedBooking.date);
+            const dateField = selectedBooking.date || selectedBooking.dates || selectedBooking.bookingDate;
+            let tourDate = null;
+            
+            if (dateField) {
+                if (Array.isArray(dateField)) {
+                    // For multiple dates, use the last date to check completion
+                    tourDate = dateField.length > 0 ? new Date(dateField[dateField.length - 1]) : null;
+                } else {
+                    tourDate = new Date(dateField);
+                }
+            }
+            
             const currentDate = new Date();
-            if (tourDate >= currentDate) {
+            if (!tourDate || tourDate >= currentDate) {
                 Alert.alert('Tour Not Completed', 'You can only add a review after the tour date has passed. Please wait until after the tour is completed.');
                 return;
             }
@@ -422,7 +469,28 @@ export default function Profile() {
                     </View>
                 </View>
                 <Text style={styles.bookingLocation}>📍 {item.location}</Text>
-                <Text style={styles.bookingDate}>📅 {item.date || 'Date TBD'}</Text>
+                <Text style={styles.bookingDate}>📅 {(() => {
+                    // Handle different date field possibilities
+                    const date = item.date || item.dates || item.bookingDate;
+                    
+                    if (!date) {
+                        return 'Date TBD';
+                    }
+                    
+                    // If it's an array of dates (multiple days booking)
+                    if (Array.isArray(date)) {
+                        if (date.length === 1) {
+                            return date[0];
+                        } else if (date.length > 1) {
+                            return `${date[0]} - ${date[date.length - 1]} (${date.length} days)`;
+                        } else {
+                            return 'Date TBD';
+                        }
+                    }
+                    
+                    // If it's a single date string
+                    return date;
+                })()}</Text>
                 
                 {/* Enhanced pricing information */}
                 <View style={styles.pricingContainer}>
@@ -452,9 +520,20 @@ export default function Profile() {
                             </View>
                         ) : (() => {
                             // Check if tour date has passed
-                            const tourDate = new Date(item.date);
+                            const dateField = item.date || item.dates || item.bookingDate;
+                            let tourDate = null;
+                            
+                            if (dateField) {
+                                if (Array.isArray(dateField)) {
+                                    // For multiple dates, use the last date to check completion
+                                    tourDate = dateField.length > 0 ? new Date(dateField[dateField.length - 1]) : null;
+                                } else {
+                                    tourDate = new Date(dateField);
+                                }
+                            }
+                            
                             const currentDate = new Date();
-                            const tourCompleted = tourDate < currentDate;
+                            const tourCompleted = tourDate && tourDate < currentDate;
                             
                             return tourCompleted ? (
                                 <TouchableOpacity 
@@ -474,7 +553,13 @@ export default function Profile() {
                             ) : (
                                 <View style={styles.statusInfo}>
                                     <Text style={styles.statusText}>
-                                        Review available after tour completion ({item.date})
+                                        Review available after tour completion ({(() => {
+                                            const dateField = item.date || item.dates || item.bookingDate;
+                                            if (Array.isArray(dateField)) {
+                                                return dateField.length > 0 ? dateField[dateField.length - 1] : 'Date TBD';
+                                            }
+                                            return dateField || 'Date TBD';
+                                        })()})
                                     </Text>
                                 </View>
                             );

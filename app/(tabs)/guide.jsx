@@ -74,11 +74,20 @@ const Guide = () => {
             const dates = [];
             res.forEach((doc) => {
                 const booking = doc.data();
-                if (booking.date) {
+                // Handle both single date and multiple dates array
+                if (booking.dates && Array.isArray(booking.dates)) {
+                    // For bookings with multiple dates array
+                    dates.push(...booking.dates);
+                } else if (booking.date) {
+                    // For legacy bookings with single date
                     dates.push(booking.date);
                 }
             });
-            setBookedDates(dates);
+            
+            // Remove duplicates and sort
+            const uniqueDates = [...new Set(dates)].sort();
+            setBookedDates(uniqueDates);
+            console.log('Booked dates for guide:', guideId, uniqueDates);
         } catch (error) {
             console.error('Error fetching booked dates:', error);
         }
@@ -103,9 +112,18 @@ const Guide = () => {
 
     const handleBookButtonClick = async (guide) => {
         setSelectedGuide(guide);
-        // Fetch booked dates for this guide
-        const guideId = guide.userId || guide.id;
-        await getBookedDates(guideId);
+        setLoading(true);
+        
+        try {
+            // Fetch latest booked dates for this guide
+            const guideId = guide.userId || guide.id;
+            await getBookedDates(guideId);
+        } catch (error) {
+            console.error('Error fetching booked dates:', error);
+        } finally {
+            setLoading(false);
+        }
+        
         setIsModalVisible(true);
     };
 
@@ -152,6 +170,10 @@ const Guide = () => {
             return;
         }
 
+        // Refresh booked dates before final validation
+        const guideId = selectedGuide.userId || selectedGuide.id;
+        await getBookedDates(guideId);
+        
         // Double-check if any selected dates are no longer available
         const unavailableDates = bookingForm.dates.filter(date => bookedDates.includes(date));
         if (unavailableDates.length > 0) {
@@ -174,13 +196,15 @@ const Guide = () => {
                 guideId: guideId,
                 guideName: selectedGuide.name,
                 guideLocation: selectedGuide.location,
-                dates: bookingForm.dates, // Multiple dates
+                dates: bookingForm.dates, // Store as array for multiple dates
                 guests: guestCount,
-                totalPrice: totalPrice, // Price multiplied by number of days
+                totalPrice: totalPrice,
                 pricePerDay: selectedGuide.pricePerDay,
                 message: bookingForm.message,
-                status: 'pending',
+                status: 'pending', // Will become 'confirmed' when guide approves
                 createdAt: new Date(),
+                // Store individual dates for easier querying
+                bookedDates: bookingForm.dates
             });
 
             Alert.alert('Success', `Booking request sent successfully for ${bookingForm.dates.length} date(s)! The guide will review your request.`);
@@ -242,7 +266,7 @@ const Guide = () => {
         if (isDateBooked(day, month, year)) {
             Alert.alert(
                 'Date Unavailable',
-                'This date is already booked by another customer. Please select a different date.',
+                `${dateString} is already booked by another customer. Please select a different date.`,
                 [{ text: 'OK' }]
             );
             return;
@@ -420,9 +444,6 @@ const Guide = () => {
                                 
                                 {bookedDates.length > 0 && (
                                     <View style={styles.availabilityInfo}>
-                                        {/* <Text style={styles.availabilityText}>
-                                            ⚠️ {bookedDates.length} date{bookedDates.length !== 1 ? 's' : ''} already booked
-                                        </Text> */}
                                         <Text style={styles.availabilitySubtext}>
                                             Please select an available date
                                         </Text>

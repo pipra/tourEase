@@ -59,7 +59,7 @@ const SignupScreen = () => {
                         onChangeText={setFirstName}
                         style={styles.input}
                         mode="outlined"
-                        left={<TextInput.Icon name="account" />}
+                        left={<TextInput.Icon icon="account" />}
                     />
                     <TextInput
                         label="Last Name"
@@ -67,7 +67,7 @@ const SignupScreen = () => {
                         onChangeText={setLastName}
                         style={styles.input}
                         mode="outlined"
-                        left={<TextInput.Icon name="account" />}
+                        left={<TextInput.Icon icon="account-outline" />}
                     />
                     <TextInput
                         label="Email"
@@ -76,7 +76,7 @@ const SignupScreen = () => {
                         keyboardType="email-address"
                         style={styles.input}
                         mode="outlined"
-                        left={<TextInput.Icon name="email" />}
+                        left={<TextInput.Icon icon="email" />}
                     />
                     <TextInput
                         label="Password"
@@ -85,7 +85,7 @@ const SignupScreen = () => {
                         secureTextEntry
                         style={styles.input}
                         mode="outlined"
-                        left={<TextInput.Icon name="lock" />}
+                        left={<TextInput.Icon icon="lock" />}
                     />
                     <TextInput
                         label="Confirm Password"
@@ -94,7 +94,7 @@ const SignupScreen = () => {
                         secureTextEntry
                         style={styles.input}
                         mode="outlined"
-                        left={<TextInput.Icon name="lock" />}
+                        left={<TextInput.Icon icon="lock-check" />}
                     />
                     <Button mode="contained" onPress={handleSignup} style={styles.button}>
                         Sign Up
