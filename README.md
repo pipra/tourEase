@@ -80,7 +80,7 @@ To make travel in Bangladesh more accessible, authentic, and memorable by connec
 - **React Native** - Cross-platform mobile development
 - **Expo Router** - File-based navigation system
 - **NativeWind** - Tailwind CSS for React Native styling
-- **Expo SDK 51** - Latest features and optimizations
+- **Expo SDK 53** - Latest features and optimizations
 
 ### Backend & Database
 - **Firebase Firestore** - Real-time NoSQL database
@@ -213,10 +213,8 @@ TourEase/
 
 ### Phase 2 (Upcoming)
 - 🔄 Push notifications
-- 🔄 In-app messaging
 - 🔄 Payment gateway integration
 - 🔄 GPS tracking and navigation
-- 🔄 Multi-language support
 
 ### Phase 3 (Future)
 - 🔄 AI-powered recommendations
@@ -242,28 +240,13 @@ We welcome contributions! Here's how you can help:
 - Test thoroughly before submitting
 - Update documentation as needed
 
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
 ## 👥 Team
 
-- **Lead Developer**: Pipra
-- **UI/UX Design**: TourEase Design Team
-- **Backend Architecture**: Firebase Integration Team
+- **Lead Developer**: Md. Habibur Rahman
 
 ## 📞 Support & Contact
 
-- **Email**: support@tourease.com
-- **GitHub Issues**: [Report bugs and request features](https://github.com/pipra/tourEase/issues)
-- **Documentation**: [Project Wiki](https://github.com/pipra/tourEase/wiki)
-
-## 🙏 Acknowledgments
-
-- **Expo Team** for the amazing development platform
-- **Firebase** for robust backend services
-- **React Native Community** for continuous innovation
-- **Open Source Contributors** who make projects like this possible
+- **Email**: habibur.191522@gmail.com
 
 ---
 
