@@ -1,7 +1,6 @@
-import React, { useEffect } from 'react'
-import { router, Tabs } from 'expo-router'
 import Ionicons from "@expo/vector-icons/Ionicons";
-import '../(auth)/firebase'
+import { router, Tabs } from 'expo-router';
+import { useEffect } from 'react';
 import { auth } from '../(auth)/firebase';
 
 const TabLayout = () => {
@@ -9,7 +8,7 @@ const TabLayout = () => {
         const unsubscribe = auth.onAuthStateChanged((userr) => {
             if (!userr) {
                 router.push('/');
-                console.log("There is no user:", userr);
+                // console.log("There is no user:", userr);
             }
         });
         return () => unsubscribe();

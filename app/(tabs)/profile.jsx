@@ -1,5 +1,4 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect } from 'expo-router';
 import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
@@ -31,7 +30,7 @@ export default function Profile() {
     const [reviewRating, setReviewRating] = useState(1);
     const [editProfileModalVisible, setEditProfileModalVisible] = useState(false);
     const [editedUserData, setEditedUserData] = useState({});
-    const [profileImageUri, setProfileImageUri] = useState(null);
+    const [profileImageUrl, setProfileImageUrl] = useState('');
     
     // Booking status notification states
     const [statusChangeModalVisible, setStatusChangeModalVisible] = useState(false);
@@ -77,17 +76,17 @@ export default function Profile() {
                     const statusChangesList = await bookingStatusService.checkForStatusChanges(userBookings, user.uid);
                     
                     if (statusChangesList.length > 0) {
-                        console.log(`Real-time: Found ${statusChangesList.length} booking status change(s)`);
+                        // console.log(`Real-time: Found ${statusChangesList.length} booking status change(s)`);
                         setStatusChanges(statusChangesList);
                         setCurrentStatusChangeIndex(0);
                         setStatusChangeModalVisible(true);
                     }
                 }, (error) => {
-                    console.error('Error in booking status listener:', error);
+                    // console.error('Error in booking status listener:', error);
                 });
 
-            } catch (error) {
-                console.error('Error setting up booking status listener:', error);
+            } catch (_error) {
+                // console.error('Error setting up booking status listener:', _error);
             }
         };
 
@@ -118,8 +117,8 @@ export default function Profile() {
                 if (docSnap.exists()) {
                     setUserData(docSnap.data());
                 }
-            } catch (err) {
-                console.log("Error fetching user data:", err.message);
+            } catch (_err) {
+                // console.log("Error fetching user data:", _err.message);
             }
         }
     };
@@ -154,13 +153,13 @@ export default function Profile() {
                     const bookingData = { id: doc.id, ...doc.data() };
                     
                     // Debug: Log booking data to see what fields are available
-                    console.log('Booking data:', {
-                        id: bookingData.id,
-                        date: bookingData.date,
-                        dates: bookingData.dates,
-                        bookingDate: bookingData.bookingDate,
-                        status: bookingData.status
-                    });
+                    // console.log('Booking data:', {
+                    //     id: bookingData.id,
+                    //     date: bookingData.date,
+                    //     dates: bookingData.dates,
+                    //     bookingDate: bookingData.bookingDate,
+                    //     status: bookingData.status
+                    // });
                     
                     bookingData.hasReview = reviewedBookingIds.has(doc.id);
                     
@@ -204,8 +203,8 @@ export default function Profile() {
                 });
                 
                 setBookings(bookingsData);
-            } catch (err) {
-                console.log("Error fetching bookings:", err.message);
+            } catch (_err) {
+                // console.log("Error fetching bookings:", _err.message);
             }
         }
     };
@@ -224,8 +223,8 @@ export default function Profile() {
                     reviewsData.push({ id: doc.id, ...doc.data() });
                 });
                 setReviews(reviewsData);
-            } catch (err) {
-                console.log("Error fetching reviews:", err.message);
+            } catch (_err) {
+                // console.log("Error fetching reviews:", _err.message);
             }
         }
     };
@@ -379,9 +378,9 @@ export default function Profile() {
                 setReviewRating(1);
                 fetchUserReviews();
                 fetchUserBookings(); // Refresh bookings to update review status
-            } catch (err) {
+            } catch (_err) {
                 Alert.alert('Error', 'Failed to add review');
-                console.log("Error adding review:", err.message);
+                // console.log("Error adding review:", _err.message);
             }
         }
     };
@@ -416,34 +415,8 @@ export default function Profile() {
                 reviews: reviewCount
             });
 
-        } catch (error) {
-            console.log("Error updating guide rating:", error);
-        }
-    };
-
-    const pickImage = async () => {
-        try {
-            // Request permission to access media library
-            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (status !== 'granted') {
-                Alert.alert('Permission required', 'Sorry, we need camera roll permissions to change your profile picture.');
-                return;
-            }
-
-            // Launch image picker
-            const result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: true,
-                aspect: [1, 1],
-                quality: 0.7,
-            });
-
-            if (!result.canceled && result.assets[0]) {
-                setProfileImageUri(result.assets[0].uri);
-            }
-        } catch (error) {
-            Alert.alert('Error', 'Failed to pick image. Please try again.');
-            console.log('Error picking image:', error);
+        } catch (_error) {
+            // console.log("Error updating guide rating:", _error);
         }
     };
 
@@ -453,7 +426,7 @@ export default function Profile() {
             location: userData?.location || '',
             service: userData?.service || 'Tourist',
         });
-        setProfileImageUri(null);
+        setProfileImageUrl(userData?.profileImageUrl || '');
         setEditProfileModalVisible(true);
     };
 
@@ -469,10 +442,9 @@ export default function Profile() {
                 service: editedUserData.service,
             };
 
-            // If a new image was selected, you would typically upload it to Firebase Storage
-            // and then save the download URL. For now, we'll save the local URI for demo purposes
-            if (profileImageUri) {
-                updateData.profileImageUrl = profileImageUri;
+            // If a new profile image URL was provided, save it
+            if (profileImageUrl.trim()) {
+                updateData.profileImageUrl = profileImageUrl.trim();
             }
 
             await updateDoc(userRef, updateData);
@@ -487,9 +459,9 @@ export default function Profile() {
             Alert.alert('Success', 'Profile updated successfully!');
             setEditProfileModalVisible(false);
             fetchUserDetails(); // Refresh user data
-        } catch (error) {
+        } catch (_error) {
             Alert.alert('Error', 'Failed to update profile. Please try again.');
-            console.log('Error updating profile:', error);
+            // console.log('Error updating profile:', _error);
         }
     };
 
@@ -695,9 +667,9 @@ export default function Profile() {
                     >
                         <View style={styles.profileCard}>
                             <View style={styles.profileImageContainer}>
-                                {profileImageUri || userData?.profileImageUrl ? (
+                                {userData?.profileImageUrl ? (
                                     <Image
-                                        source={profileImageUri ? { uri: profileImageUri } : { uri: userData.profileImageUrl }}
+                                        source={{ uri: userData.profileImageUrl }}
                                         style={styles.profileImage}
                                     />
                                 ) : (
@@ -722,7 +694,21 @@ export default function Profile() {
                                 </View>
                                 <View style={styles.detailRow}>
                                     <Text style={styles.detailLabel}>Member since:</Text>
-                                    <Text style={styles.detailValue}>2024</Text>
+                                    <Text style={styles.detailValue}>
+                                        {userData?.createdAt ? 
+                                            (() => {
+                                                const date = userData.createdAt.toDate ? 
+                                                    userData.createdAt.toDate() : 
+                                                    new Date(userData.createdAt);
+                                                return date.toLocaleDateString('en-GB', { 
+                                                    day: 'numeric', 
+                                                    month: 'long', 
+                                                    year: 'numeric' 
+                                                });
+                                            })() : 
+                                            'Recently'
+                                        }
+                                    </Text>
                                 </View>
                             </View>
                         </View>
@@ -971,21 +957,24 @@ export default function Profile() {
                             <View style={styles.modalContent}>
                                 <Text style={styles.modalTitle}>Edit Profile</Text>
                                 
-                                <View style={styles.imagePickerContainer}>
-                                    <TouchableOpacity 
-                                        style={styles.imagePickerButton}
-                                        onPress={pickImage}
-                                    >
-                                        {profileImageUri ? (
-                                            <Image
-                                                source={{ uri: profileImageUri }}
-                                                style={styles.pickedImage}
-                                            />
-                                        ) : (
-                                            <Text style={styles.imagePickerText}>📸 Pick an image</Text>
-                                        )}
-                                    </TouchableOpacity>
-                                </View>
+                                <TextInput
+                                    style={styles.editInput}
+                                    placeholder="Profile Picture URL (optional)"
+                                    value={profileImageUrl}
+                                    onChangeText={setProfileImageUrl}
+                                    multiline={false}
+                                />
+                                
+                                {profileImageUrl.trim() && (
+                                    <View style={styles.imagePreviewContainer}>
+                                        <Text style={styles.imagePreviewLabel}>Preview:</Text>
+                                        <Image
+                                            source={{ uri: profileImageUrl }}
+                                            style={styles.imagePreview}
+                                            onError={() => Alert.alert('Invalid URL', 'Please enter a valid image URL')}
+                                        />
+                                    </View>
+                                )}
                                 
                                 {/* <TextInput
                                     style={styles.editInput}
@@ -1776,30 +1765,22 @@ const styles = StyleSheet.create({
         color: '#E53E3E',
         fontWeight: 'bold',
     },
-    imagePickerContainer: {
+    imagePreviewContainer: {
         alignItems: 'center',
         marginBottom: 20,
     },
-    imagePickerButton: {
-        borderWidth: 1,
-        borderColor: '#ddd',
-        borderRadius: 8,
-        padding: 12,
-        width: '100%',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: 120,
-        marginBottom: 15,
-    },
-    imagePickerText: {
+    imagePreviewLabel: {
+        fontSize: 14,
         color: '#666',
+        marginBottom: 8,
         fontWeight: '600',
-        textAlign: 'center',
     },
-    pickedImage: {
-        width: '100%',
-        height: '100%',
-        borderRadius: 8,
+    imagePreview: {
+        width: 120,
+        height: 120,
+        borderRadius: 60,
+        borderWidth: 2,
+        borderColor: '#6200EE',
     },
     editInput: {
         borderWidth: 1,

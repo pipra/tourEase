@@ -14,7 +14,7 @@ export const getCurrentUserType = async () => {
         }
         return 'user'; // Default to regular user
     } catch (_error) {
-        console.error('Error getting user type:', _error);
+        // console.error('Error getting user type:', _error);
         return 'user';
     }
 };

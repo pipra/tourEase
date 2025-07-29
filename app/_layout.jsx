@@ -38,8 +38,8 @@ export default function RootLayout() {
                     //     // User document doesn't exist, go to home
                     //     router.replace('/(tabs)/home');
                     // }
-                } catch (error) {
-                    console.error('Error checking user type:', error);
+                } catch (_error) {
+                    // console.error('Error checking user type:', _error);
                     // router.replace('/(tabs)/home');
                 }
             } else {

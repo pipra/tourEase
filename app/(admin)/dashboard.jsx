@@ -823,6 +823,7 @@ const AdminDashboard = () => {
                     <TextInput
                         style={styles.searchInput}
                         placeholder="Search..."
+                        placeholderTextColor={'#4f4d57'}
                         value={searchQuery}
                         onChangeText={setSearchQuery}
                     />
@@ -911,24 +912,28 @@ const AdminDashboard = () => {
                             <TextInput
                                 style={styles.locationInput}
                                 placeholder="Place Name (e.g., Cox's Bazar Sea Beach)"
+                                placeholderTextColor={'#4f4d57'}
                                 value={locationForm.name}
                                 onChangeText={(text) => setLocationForm({...locationForm, placeName: text})}
                             />
                             <TextInput
                                 style={styles.locationInput}
                                 placeholder="Location Name *"
+                                placeholderTextColor={'#4f4d57'}
                                 value={locationForm.placeName}
                                 onChangeText={(text) => setLocationForm({...locationForm, name: text})}
                             />
                             <TextInput
                                 style={styles.locationInput}
                                 placeholder="Category (e.g., Historical, Beach, Mountain)"
+                                placeholderTextColor={'#4f4d57'}
                                 value={locationForm.category}
                                 onChangeText={(text) => setLocationForm({...locationForm, category: text})}
                             />
                             <TextInput
                                 style={[styles.locationInput, styles.textArea]}
                                 placeholder="Description"
+                                placeholderTextColor={'#4f4d57'}
                                 value={locationForm.description}
                                 onChangeText={(text) => setLocationForm({...locationForm, description: text})}
                                 multiline
@@ -937,36 +942,42 @@ const AdminDashboard = () => {
                             <TextInput
                                 style={styles.locationInput}
                                 placeholder="Main Attractions"
+                                placeholderTextColor={'#4f4d57'}
                                 value={locationForm.attractions}
                                 onChangeText={(text) => setLocationForm({...locationForm, attractions: text})}
                             />
                             <TextInput
                                 style={styles.locationInput}
                                 placeholder="Best Time to Visit"
+                                placeholderTextColor={'#4f4d57'}
                                 value={locationForm.bestTimeToVisit}
                                 onChangeText={(text) => setLocationForm({...locationForm, bestTimeToVisit: text})}
                             />
                             <TextInput
                                 style={styles.locationInput}
                                 placeholder="Average Temperature"
+                                placeholderTextColor={'#4f4d57'}
                                 value={locationForm.averageTemperature}
                                 onChangeText={(text) => setLocationForm({...locationForm, averageTemperature: text})}
                             />
                             <TextInput
                                 style={styles.locationInput}
                                 placeholder="Local Language"
+                                placeholderTextColor={'#4f4d57'}
                                 value={locationForm.language}
                                 onChangeText={(text) => setLocationForm({...locationForm, language: text})}
                             />
                             <TextInput
                                 style={styles.locationInput}
                                 placeholder="Currency"
+                                placeholderTextColor={'#4f4d57'}
                                 value={locationForm.currency}
                                 onChangeText={(text) => setLocationForm({...locationForm, currency: text})}
                             />
                             <TextInput
                                 style={styles.locationInput}
                                 placeholder="Image URL"
+                                placeholderTextColor={'#4f4d57'}
                                 value={locationForm.image}
                                 onChangeText={(text) => setLocationForm({...locationForm, image: text})}
                             />

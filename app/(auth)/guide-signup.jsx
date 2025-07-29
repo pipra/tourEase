@@ -172,12 +172,14 @@ const GuideSignup = () => {
                         <TextInput
                             style={[styles.input, styles.halfInput]}
                             placeholder="First Name *"
+                            placeholderTextColor={'#4f4d57'}
                             value={formData.firstName}
                             onChangeText={(value) => handleInputChange('firstName', value)}
                         />
                         <TextInput
                             style={[styles.input, styles.halfInput]}
                             placeholder="Last Name *"
+                            placeholderTextColor={'#4f4d57'}
                             value={formData.lastName}
                             onChangeText={(value) => handleInputChange('lastName', value)}
                         />
@@ -186,6 +188,7 @@ const GuideSignup = () => {
                     <TextInput
                         style={styles.input}
                         placeholder="Email Address *"
+                        placeholderTextColor={'#4f4d57'}
                         value={formData.email}
                         onChangeText={(value) => handleInputChange('email', value)}
                         keyboardType="email-address"
@@ -195,6 +198,7 @@ const GuideSignup = () => {
                     <TextInput
                         style={styles.input}
                         placeholder="Phone Number *"
+                        placeholderTextColor={'#4f4d57'}
                         value={formData.phone}
                         onChangeText={(value) => handleInputChange('phone', value)}
                         keyboardType="phone-pad"
@@ -204,6 +208,7 @@ const GuideSignup = () => {
                         <TextInput
                             style={[styles.input, styles.halfInput]}
                             placeholder="Password *"
+                            placeholderTextColor={'#4f4d57'}
                             value={formData.password}
                             onChangeText={(value) => handleInputChange('password', value)}
                             secureTextEntry
@@ -211,6 +216,7 @@ const GuideSignup = () => {
                         <TextInput
                             style={[styles.input, styles.halfInput]}
                             placeholder="Confirm Password *"
+                            placeholderTextColor={'#4f4d57'}
                             value={formData.confirmPassword}
                             onChangeText={(value) => handleInputChange('confirmPassword', value)}
                             secureTextEntry
@@ -222,6 +228,7 @@ const GuideSignup = () => {
                     <TextInput
                         style={styles.input}
                         placeholder="Primary Location/City *"
+                        placeholderTextColor={'#4f4d57'}
                         value={formData.location}
                         onChangeText={(value) => handleInputChange('location', value)}
                     />
@@ -229,6 +236,7 @@ const GuideSignup = () => {
                     <TextInput
                         style={styles.input}
                         placeholder="Years of Experience *"
+                        placeholderTextColor={'#4f4d57'}
                         value={formData.experience}
                         onChangeText={(value) => handleInputChange('experience', value)}
                         keyboardType="numeric"
@@ -237,6 +245,7 @@ const GuideSignup = () => {
                     <TextInput
                         style={styles.input}
                         placeholder="Languages Spoken (e.g., English, Bengali, Hindi)"
+                        placeholderTextColor={'#4f4d57'}
                         value={formData.languages}
                         onChangeText={(value) => handleInputChange('languages', value)}
                     />
@@ -244,6 +253,7 @@ const GuideSignup = () => {
                     <TextInput
                         style={styles.input}
                         placeholder="Specialties (e.g., Historical sites, Nature tours)"
+                        placeholderTextColor={'#4f4d57'}
                         value={formData.specialties}
                         onChangeText={(value) => handleInputChange('specialties', value)}
                     />
@@ -251,6 +261,7 @@ const GuideSignup = () => {
                     <TextInput
                         style={styles.input}
                         placeholder="Daily Rate (BDT) *"
+                        placeholderTextColor={'#4f4d57'}
                         value={formData.pricePerDay}
                         onChangeText={(value) => handleInputChange('pricePerDay', value)}
                         keyboardType="numeric"
@@ -259,6 +270,7 @@ const GuideSignup = () => {
                     <TextInput
                         style={[styles.input, styles.textArea]}
                         placeholder="Tell us about yourself and your guiding experience..."
+                        placeholderTextColor={'#4f4d57'}
                         value={formData.bio}
                         onChangeText={(value) => handleInputChange('bio', value)}
                         multiline
@@ -271,6 +283,7 @@ const GuideSignup = () => {
                     <TextInput
                         style={styles.input}
                         placeholder="Profile Image URL (optional)"
+                        placeholderTextColor={'#4f4d57'}
                         value={formData.imageUrl}
                         onChangeText={(value) => handleInputChange('imageUrl', value)}
                         autoCapitalize="none"

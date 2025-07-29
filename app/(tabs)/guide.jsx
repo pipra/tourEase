@@ -56,8 +56,8 @@ const Guide = () => {
                 guidesData.push({ id: item.id, ...item.data() });
             });
             setGuides(guidesData);
-        } catch (error) {
-            console.error('Error fetching guides:', error);
+        } catch (_error) {
+            // console.error('Error fetching guides:', _error);
             Alert.alert('Error', 'Failed to load guides');
         }
     };
@@ -87,9 +87,9 @@ const Guide = () => {
             // Remove duplicates and sort
             const uniqueDates = [...new Set(dates)].sort();
             setBookedDates(uniqueDates);
-            console.log('Booked dates for guide:', guideId, uniqueDates);
-        } catch (error) {
-            console.error('Error fetching booked dates:', error);
+            // console.log('Booked dates for guide:', guideId, uniqueDates);
+        } catch (_error) {
+            // console.error('Error fetching booked dates:', _error);
         }
     };
 

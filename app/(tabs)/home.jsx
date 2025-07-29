@@ -49,6 +49,7 @@ const Home = () => {
                 const transformedLocation = {
                     id: doc.id,
                     name: data.name || '',
+                    placeName: data.placeName || '',
                     image: data.image || 'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=400&q=80',
                     description: data.description || '',
                     rating: parseFloat(data.rating) || 0,
@@ -72,8 +73,8 @@ const Home = () => {
             setPlaces(topPlaces);
             setFilteredPlaces(topPlaces);
             
-        } catch (error) {
-            console.error("Error fetching places:", error);
+        } catch (_error) {
+            // console.error("Error fetching places:", _error);
             // If Firebase fails, show empty array
             setPlaces([]);
             setFilteredPlaces([]);
@@ -109,8 +110,8 @@ const Home = () => {
             // Initially show top 3 guides (already sorted by rating/reviews)
             setFilteredGuides(sortedGuides.slice(0, 3));
             setLoading(false);
-        } catch (error) {
-            console.error("Error fetching guides:", error);
+        } catch (_error) {
+            // console.error("Error fetching guides:", _error);
             setLoading(false);
         }
     };
@@ -144,10 +145,11 @@ const Home = () => {
             });
             setFilteredGuides(sortedGuides.slice(0, 3));
         } else {
-            // Filter popular places by location and maintain rating-based sorting
+            // Filter popular places by location and placeName, maintain rating-based sorting
             const filteredPopularPlaces = places
                 .filter(place =>
-                    place.name.toLowerCase().includes(location.toLowerCase())
+                    place.name.toLowerCase().includes(location.toLowerCase()) ||
+                    (place.placeName && place.placeName.toLowerCase().includes(location.toLowerCase()))
                 )
                 .sort((a, b) => {
                     // First sort by rating (highest to lowest)
@@ -219,6 +221,9 @@ const Home = () => {
             <Image source={{ uri: item.image }} style={styles.placeImage} />
             <View style={styles.placeOverlay}>
                 <Text style={styles.placeName}>{item.name}</Text>
+                {item.placeName && (
+                    <Text style={styles.placeNameText}>{item.placeName}</Text>
+                )}
                 <Text style={styles.placeDescription} numberOfLines={2} ellipsizeMode="tail">
                     {item.description}
                 </Text>
@@ -240,7 +245,10 @@ const Home = () => {
                 <Text style={styles.guideName}>{item.name}</Text>
                 <Text style={styles.guideLocation}>{item.location}</Text>
                 <View style={styles.ratingContainer}>
-                    <Text style={styles.rating}>⭐ {item.rating || 0}</Text>
+                    <View style={styles.ratingInfo}>
+                        <Text style={styles.rating}>⭐ {item.rating || 0}</Text>
+                        <Text style={styles.ratingCount}>({item.reviews || 0} reviews)</Text>
+                    </View>
                     <Text style={styles.price}>৳{item.pricePerDay}/day</Text>
                 </View>
             </View>
@@ -463,8 +471,11 @@ const Home = () => {
                                         <Text style={styles.modalTitle}>{selectedGuide.name}</Text>
                                         
                                         <View style={styles.modalRatingSection}>
-                                            <Text style={styles.modalRating}>⭐ {selectedGuide.rating || 0}</Text>
-                                            <Text style={styles.modalPrice}>৳{selectedGuide.price}/day</Text>
+                                            <View style={styles.modalRatingInfo}>
+                                                <Text style={styles.modalRating}>⭐ {selectedGuide.rating || 0}</Text>
+                                                <Text style={styles.modalReviews}>({selectedGuide.reviews || 0} reviews)</Text>
+                                            </View>
+                                            <Text style={styles.modalPrice}>৳{selectedGuide.pricePerDay}/day</Text>
                                         </View>
                                         
                                         <Text style={styles.modalSectionTitle}>Location</Text>
@@ -484,7 +495,7 @@ const Home = () => {
                                             </>
                                         )}
                                         
-                                        <TouchableOpacity 
+                                        {/* <TouchableOpacity 
                                             style={styles.contactButton}
                                             onPress={() => {
                                                 closeGuideModal();
@@ -495,7 +506,7 @@ const Home = () => {
                                             }}
                                         >
                                             <Text style={styles.contactButtonText}>Contact Guide</Text>
-                                        </TouchableOpacity>
+                                        </TouchableOpacity> */}
                                     </View>
                                 </ScrollView>
                             </>
@@ -627,6 +638,12 @@ const styles = StyleSheet.create({
         fontWeight: "bold",
         marginBottom: 2,
     },
+    placeNameText: {
+        color: "#FFD700",
+        fontSize: 12,
+        fontWeight: "600",
+        marginBottom: 4,
+    },
     placeDescription: {
         color: "#E8EAED",
         fontSize: 12,
@@ -684,10 +701,19 @@ const styles = StyleSheet.create({
         justifyContent: "space-between",
         alignItems: "center",
     },
+    ratingInfo: {
+        flexDirection: "column",
+        alignItems: "flex-start",
+    },
     rating: {
         fontSize: 12,
         color: "#FF6B35",
         fontWeight: "600",
+    },
+    ratingCount: {
+        fontSize: 10,
+        color: "#666",
+        marginTop: 2,
     },
     price: {
         fontSize: 12,
@@ -796,6 +822,11 @@ const styles = StyleSheet.create({
         alignItems: "center",
         justifyContent: "space-between",
         marginBottom: 16,
+    },
+    modalRatingInfo: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
     },
     modalRating: {
         fontSize: 16,
