@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { useState } from 'react';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -40,9 +40,18 @@ const SignupScreen = () => {
                 });
             }
 
-            // console.log(user);
-            Alert.alert('User Registered Successfully!!');
-            router.push('/login');
+            // send verification email and sign out so user must verify before logging in
+            if (user) {
+                try {
+                    await sendEmailVerification(user);
+                } catch (err) {
+                    console.warn('Failed to send verification email:', err);
+                }
+                await auth.signOut();
+            }
+
+            Alert.alert('Registered', 'A verification email has been sent. Please verify your email before logging in.');
+            router.replace('/login');
         } catch (error) {
             Alert.alert("Error!", error.message);
         }

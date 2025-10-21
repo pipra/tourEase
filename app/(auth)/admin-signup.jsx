@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { useState } from 'react';
 import {
@@ -79,6 +79,9 @@ const AdminSignup = () => {
                 displayName: `${formData.firstName} ${formData.lastName}`,
             });
 
+            // Send verification email
+            await sendEmailVerification(user);
+
             // Save admin data to Firestore
             await setDoc(doc(db, 'Users', user.uid), {
                 email: user.email,
@@ -87,11 +90,12 @@ const AdminSignup = () => {
                 userType: 'admin', // Set as admin
                 createdAt: new Date(),
                 role: 'Administrator',
+                emailVerified: false
             });
 
             Alert.alert(
                 'Admin Account Created',
-                'Admin account has been created successfully!',
+                'Please check your email to verify your account before logging in.',
                 [
                     {
                         text: 'OK',

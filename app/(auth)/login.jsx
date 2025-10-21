@@ -18,37 +18,7 @@ const Login = () => {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
 
-    // Quick admin creation for testing (remove in production)
-    const createTestAdmin = async () => {
-        Alert.alert(
-            "Create Test Admin",
-            "This will create admin@tourease.com with password 'admin123'. Note: This might sign you out of your current session.",
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Create",
-                    onPress: async () => {
-                        try {
-                            const { createUserWithEmailAndPassword } = await import("firebase/auth");
-                            const { setDoc, doc } = await import("firebase/firestore");
-                            
-                            const userCredential = await createUserWithEmailAndPassword(auth, "admin@tourease.com", "admin123");
-                            await setDoc(doc(db, 'Users', userCredential.user.uid), {
-                                email: "admin@tourease.com",
-                                firstName: "Test",
-                                lastName: "Admin",
-                                userType: 'admin',
-                                createdAt: new Date(),
-                            });
-                            Alert.alert("Success", "Test admin created! You can now sign out and login with admin@tourease.com / admin123");
-                        } catch (_error) {
-                            Alert.alert("Info", "Admin might already exist or error occurred");
-                        }
-                    }
-                }
-            ]
-        );
-    };
+    // No state needed for admin creation as it's moved to separate page
 
     const handleLogin = async () => {
         if (!email || !password) {
@@ -60,6 +30,26 @@ const Login = () => {
             // Sign in the user
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
+
+            // Prevent access if email not verified
+            if (!user.emailVerified) {
+                // Try to resend verification email (best-effort) then sign out to block access
+                try {
+                    const { sendEmailVerification } = await import('firebase/auth');
+                    await sendEmailVerification(user);
+                } catch (_err) {
+                    // ignore send failures
+                }
+
+                // Sign out immediately so the unverified user cannot access the app
+                await auth.signOut();
+
+                Alert.alert(
+                    'Email Not Verified',
+                    'Your email is not verified. A verification email has been sent. Please verify your email before logging in.'
+                );
+                return;
+            }
 
             // Check user type from Firestore
             const userDoc = await getDoc(doc(db, 'Users', user.uid));
@@ -97,11 +87,11 @@ const Login = () => {
                     Alert.alert("Welcome!", "Enjoy exploring amazing places...");
                     router.replace("/(tabs)/home");
                 }
-            } 
-            // else {
-            //     // No user document found, treat as regular user
-            //     router.replace("/(tabs)/home");
-            // }
+            } else {
+                // No user document found, treat as regular user
+                Alert.alert("Welcome!", "Enjoy exploring amazing places...");
+                router.replace("/(tabs)/home");
+            }
         } catch (error) {
             Alert.alert("Error!", error.message);
         }
@@ -134,6 +124,12 @@ const Login = () => {
                             mode="outlined"
                             left={<TextInput.Icon icon="lock" />}
                         />
+                        <TouchableOpacity
+                            onPress={() => router.push('/forgot-password')}
+                            style={{ alignSelf: 'flex-end', marginTop: -10, marginBottom: 10 }}
+                        >
+                            <Text style={{ color: '#6200EE', fontWeight: '500', fontSize: 14 }}>Forgot Password?</Text>
+                        </TouchableOpacity>
                         <Button
                             style={styles.button}
                             mode="contained"
@@ -172,12 +168,16 @@ const Login = () => {
                                 </Text>
                             </TouchableOpacity> */}
 
-                            {/* <TouchableOpacity
-                                onPress={createTestAdmin}
-                                className="flex flex-row items-center justify-center mt-4 opacity-50"
+                            {/* Admin Creation Button */}
+                            <TouchableOpacity
+                                onPress={() => router.push('/admin-signup')}
+                                className="flex flex-row items-center justify-center mt-4"
+                                style={{ backgroundColor: '#DC3545', padding: 8, borderRadius: 5 }}
                             >
-                                <Text className="text-xs">🧪 Create Test Admin</Text>
-                            </TouchableOpacity> */}
+                                <Text style={{ color: 'white', fontSize: 12, fontWeight: '600' }}>
+                                    🔑 Create Admin Account
+                                </Text>
+                            </TouchableOpacity>
 
                             {/* Sign out button if already logged in */}
                             {/* {auth.currentUser && (
@@ -205,6 +205,17 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         alignItems: "center",
         backgroundColor: "transparent",
+    },
+    modalOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1000,
     },
     backgroundImage: {
         width: "100%",
