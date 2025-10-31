@@ -1,5 +1,6 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
+import { onAuthStateChanged } from 'firebase/auth';
 import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -31,6 +32,8 @@ export default function Profile() {
     const [editProfileModalVisible, setEditProfileModalVisible] = useState(false);
     const [editedUserData, setEditedUserData] = useState({});
     const [profileImageUrl, setProfileImageUrl] = useState('');
+    const [isLoading, setIsLoading] = useState(true);
+    const [authChecked, setAuthChecked] = useState(false);
     
     // Booking status notification states
     const [statusChangeModalVisible, setStatusChangeModalVisible] = useState(false);
@@ -38,10 +41,22 @@ export default function Profile() {
     const [currentStatusChangeIndex, setCurrentStatusChangeIndex] = useState(0);
     const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
+    // Check auth state first
     useEffect(() => {
-        fetchUserDetails();
-        fetchUserBookings();
-        fetchUserReviews();
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            setAuthChecked(true);
+            if (user) {
+                fetchUserDetails();
+                fetchUserBookings();
+                fetchUserReviews();
+            } else {
+                setIsLoading(false);
+                // Redirect to login if not authenticated
+                router.replace('/(auth)/login');
+            }
+        });
+
+        return () => unsubscribe();
     }, []);
 
     // Real-time listener for booking status changes
@@ -116,10 +131,23 @@ export default function Profile() {
 
                 if (docSnap.exists()) {
                     setUserData(docSnap.data());
+                } else {
+                    // If user document doesn't exist, create a basic userData object
+                    setUserData({
+                        email: user.email,
+                        service: 'Tourist',
+                        location: 'N/A',
+                        createdAt: new Date()
+                    });
                 }
             } catch (_err) {
-                // console.log("Error fetching user data:", _err.message);
+                console.log("Error fetching user data:", _err.message);
+                Alert.alert('Error', 'Failed to load user data. Please try again.');
+            } finally {
+                setIsLoading(false);
             }
+        } else {
+            setIsLoading(false);
         }
     };
 
@@ -854,7 +882,7 @@ export default function Profile() {
 
     return (
         <SafeAreaView style={styles.container}>
-            {userData ? (
+            {!isLoading && userData ? (
                 <>
                     {/* Header */}
                     <View style={styles.header}>
@@ -1120,7 +1148,9 @@ export default function Profile() {
                 </>
             ) : (
                 <View style={styles.loadingContainer}>
-                    <Text style={styles.loadingText}>Loading...</Text>
+                    <Text style={styles.loadingText}>
+                        {!authChecked ? 'Checking authentication...' : 'Loading profile...'}
+                    </Text>
                 </View>
             )}
         </SafeAreaView>
