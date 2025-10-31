@@ -1,6 +1,6 @@
 import { router } from "expo-router";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { sendEmailVerification, signInWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { useState } from "react";
 import {
     Alert,
@@ -18,8 +18,6 @@ const Login = () => {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
 
-    // No state needed for admin creation as it's moved to separate page
-
     const handleLogin = async () => {
         if (!email || !password) {
             Alert.alert("Error!", "Please fill in both fields");
@@ -27,72 +25,129 @@ const Login = () => {
         }
 
         try {
-            // Sign in the user
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
-
-            // Prevent access if email not verified
-            if (!user.emailVerified) {
-                // Try to resend verification email (best-effort) then sign out to block access
-                try {
-                    const { sendEmailVerification } = await import('firebase/auth');
-                    await sendEmailVerification(user);
-                } catch (_err) {
-                    // ignore send failures
-                }
-
-                // Sign out immediately so the unverified user cannot access the app
+            
+            // Force reload to get the absolute latest emailVerified status from Firebase
+            await user.reload();
+            const refreshedUser = auth.currentUser;
+            
+            console.log('Login attempt - Email verified status:', refreshedUser.emailVerified);
+            console.log('User email:', refreshedUser.email);
+            
+            // Check user type from Firestore first
+            const userDoc = await getDoc(doc(db, 'Users', refreshedUser.uid));
+            
+            if (!userDoc.exists()) {
                 await auth.signOut();
-
+                Alert.alert("Error", "User data not found. Please contact support.");
+                return;
+            }
+            
+            const userData = userDoc.data();
+            
+            // Handle email verification based on user type
+            if (!refreshedUser.emailVerified) {
+                // Send verification email
+                try {
+                    const actionCodeSettings = {
+                        url: 'https://tourease-4cd42.firebaseapp.com',
+                        handleCodeInApp: true,
+                    };
+                    await sendEmailVerification(refreshedUser, actionCodeSettings);
+                    console.log('Verification email sent to:', refreshedUser.email);
+                } catch (emailError) {
+                    console.error('Error sending verification email:', emailError);
+                }
+                
+                await auth.signOut();
                 Alert.alert(
                     'Email Not Verified',
-                    'Your email is not verified. A verification email has been sent. Please verify your email before logging in.'
+                    'A verification email has been sent to ' + refreshedUser.email + '. Please verify your email and try logging in again.\n\nNote: After clicking the verification link, please wait a moment before logging in again.',
+                    [{ text: 'OK' }]
                 );
                 return;
             }
-
-            // Check user type from Firestore
-            const userDoc = await getDoc(doc(db, 'Users', user.uid));
             
-            if (userDoc.exists()) {
-                const userData = userDoc.data();
+            // Email is verified - Update Firestore if not already marked as verified
+            if (!userData.emailVerified) {
+                try {
+                    await updateDoc(doc(db, 'Users', refreshedUser.uid), {
+                        emailVerified: true,
+                    });
+                    console.log('Updated Users collection - emailVerified: true');
+                    
+                    // If user is a guide applicant, also update guide-applications
+                    if (userData.userType === 'guide') {
+                        const applicationDoc = await getDoc(doc(db, 'guide-applications', refreshedUser.uid));
+                        if (applicationDoc.exists() && !applicationDoc.data().emailVerified) {
+                            await updateDoc(doc(db, 'guide-applications', refreshedUser.uid), {
+                                emailVerified: true,
+                            });
+                            console.log('Updated guide-applications collection - emailVerified: true');
+                        }
+                    }
+                } catch (updateError) {
+                    console.error('Error updating Firestore verification status:', updateError);
+                }
+            }
+            
+            // Email is verified, now route based on user type
+            if (userData.userType === 'admin') {
+                Alert.alert("Welcome Admin!", "Redirecting to admin dashboard...");
+                router.replace('/(admin)/dashboard');
+            } else if (userData.userType === 'guide') {
+                // Check if guide is approved by checking the guides collection
+                const guideDoc = await getDoc(doc(db, 'guides', refreshedUser.uid));
                 
-                // Route based on user type
-                if (userData.userType === 'admin') {
-                    Alert.alert("Welcome Admin!", "Redirecting to admin dashboard...");
-                    router.replace('/(admin)/dashboard');
-                } else if (userData.userType === 'guide') {
-                    // Check if guide is approved
-                    const guideDoc = await getDoc(doc(db, 'guides', user.uid));
-                    if (guideDoc.exists()) {
-                        Alert.alert("Welcome Guide!", "Redirecting to guide dashboard...");
-                        router.replace('/(guide)/dashboard');
+                if (guideDoc.exists() && guideDoc.data().status === 'approved') {
+                    // Guide is approved, allow login
+                    Alert.alert("Welcome Guide!", "Redirecting to guide dashboard...");
+                    router.replace('/(guide)/dashboard');
+                } else {
+                    // Check application status
+                    const applicationDoc = await getDoc(doc(db, 'guide-applications', refreshedUser.uid));
+                    
+                    if (applicationDoc.exists()) {
+                        const appData = applicationDoc.data();
+                        
+                        if (appData.status === 'pending') {
+                            await auth.signOut();
+                            Alert.alert(
+                                "Application Pending",
+                                "Your guide application is under review by our admin team. You will be notified once approved.",
+                                [{ text: "OK" }]
+                            );
+                        } else if (appData.status === 'rejected') {
+                            await auth.signOut();
+                            Alert.alert(
+                                "Application Rejected",
+                                "Unfortunately, your guide application was not approved. Please contact support for more information.",
+                                [{ text: "OK" }]
+                            );
+                        } else {
+                            await auth.signOut();
+                            Alert.alert(
+                                "Access Denied",
+                                "Your guide application is being processed. Please wait for approval.",
+                                [{ text: "OK" }]
+                            );
+                        }
                     } else {
-                        // Guide not approved yet
+                        await auth.signOut();
                         Alert.alert(
-                            "Application Pending", 
-                            "Your guide application is still under review. Please wait for approval.",
-                            [
-                                {
-                                    text: "OK",
-                                    onPress: async () => {
-                                        await auth.signOut();
-                                    }
-                                }
-                            ]
+                            "No Application Found",
+                            "No guide application found for your account. Please apply to become a guide first.",
+                            [{ text: "OK" }]
                         );
                     }
-                } else {
-                    // Regular user
-                    Alert.alert("Welcome!", "Enjoy exploring amazing places...");
-                    router.replace("/(tabs)/home");
                 }
             } else {
-                // No user document found, treat as regular user
-                Alert.alert("Welcome!", "Enjoy exploring amazing places...");
+                // Regular user
                 router.replace("/(tabs)/home");
             }
         } catch (error) {
+            console.error('Login error:', error);
             Alert.alert("Error!", error.message);
         }
     };
@@ -169,7 +224,7 @@ const Login = () => {
                             </TouchableOpacity> */}
 
                             {/* Admin Creation Button */}
-                            <TouchableOpacity
+                            {/* <TouchableOpacity
                                 onPress={() => router.push('/admin-signup')}
                                 className="flex flex-row items-center justify-center mt-4"
                                 style={{ backgroundColor: '#DC3545', padding: 8, borderRadius: 5 }}
@@ -177,7 +232,7 @@ const Login = () => {
                                 <Text style={{ color: 'white', fontSize: 12, fontWeight: '600' }}>
                                     🔑 Create Admin Account
                                 </Text>
-                            </TouchableOpacity>
+                            </TouchableOpacity> */}
 
                             {/* Sign out button if already logged in */}
                             {/* {auth.currentUser && (

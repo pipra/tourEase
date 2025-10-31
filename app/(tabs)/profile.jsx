@@ -888,7 +888,7 @@ export default function Profile() {
                     <View style={styles.header}>
                         <Text style={styles.headerTitle}>Profile</Text>
                         <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-                            <Text style={styles.logoutText}>Logout</Text>
+                            <Text style={styles.logoutText}>Sign Out</Text>
                         </TouchableOpacity>
                     </View>
 

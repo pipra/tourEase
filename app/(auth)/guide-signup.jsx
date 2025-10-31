@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { useState } from 'react';
 import {
@@ -8,10 +8,10 @@ import {
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
+import { Button, Card, TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db } from './firebase';
 
@@ -107,10 +107,12 @@ const GuideSignup = () => {
                 lastName: formData.lastName,
                 phone: formData.phone,
                 userType: 'guide',
+                emailVerified: false,
+                canLogin: false, // Cannot login until admin approves
                 createdAt: new Date(),
             });
 
-            // Save guide-specific data
+            // Save guide application data (not approved yet)
             await setDoc(doc(db, 'guide-applications', user.uid), {
                 userId: user.uid,
                 name: `${formData.firstName} ${formData.lastName}`,
@@ -123,21 +125,31 @@ const GuideSignup = () => {
                 bio: formData.bio,
                 pricePerDay: parseInt(formData.pricePerDay),
                 status: 'pending', // Admin needs to approve
+                emailVerified: false, // Not verified yet
                 appliedAt: new Date(),
                 rating: 0,
                 reviews: 0,
                 image: formData.imageUrl || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=400&q=80',
             });
 
+            // Send email verification
+            const actionCodeSettings = {
+                url: 'https://tourease-4cd42.firebaseapp.com',
+                handleCodeInApp: true,
+            };
+            await sendEmailVerification(user, actionCodeSettings);
+
+            // Sign out so user must verify before logging in
+            await auth.signOut();
+
             Alert.alert(
-                'Application Submitted',
-                'Your guide application has been submitted for review. You will be notified once it is approved.',
+                'Verify Your Email',
+                'A verification email has been sent to ' + formData.email + '. Please verify your email by clicking the link in the email, then login again.\n\nAfter email verification, your application will be submitted to admin for approval.',
                 [
                     {
                         text: 'OK',
                         onPress: () => {
-                            auth.signOut(); // Sign out the user until approved
-                            router.push('/');
+                            router.replace('/login');
                         },
                     },
                 ]
@@ -165,169 +177,198 @@ const GuideSignup = () => {
                     </Text>
                 </View>
 
-                <View style={styles.form}>
-                    <Text style={styles.sectionTitle}>Personal Information</Text>
-                    
-                    <View style={styles.row}>
-                        <TextInput
-                            style={[styles.input, styles.halfInput]}
-                            placeholder="First Name *"
-                            placeholderTextColor={'#4f4d57'}
-                            value={formData.firstName}
-                            onChangeText={(value) => handleInputChange('firstName', value)}
-                        />
-                        <TextInput
-                            style={[styles.input, styles.halfInput]}
-                            placeholder="Last Name *"
-                            placeholderTextColor={'#4f4d57'}
-                            value={formData.lastName}
-                            onChangeText={(value) => handleInputChange('lastName', value)}
-                        />
-                    </View>
+                <View style={styles.formContainer}>
+                    <Card style={styles.card}>
+                        <Card.Content>
+                            <Text style={styles.sectionTitle}>Personal Information</Text>
+                            
+                            <View style={styles.row}>
+                                <TextInput
+                                    label="First Name *"
+                                    style={[styles.input, styles.halfInput]}
+                                    value={formData.firstName}
+                                    onChangeText={(value) => handleInputChange('firstName', value)}
+                                    mode="outlined"
+                                    left={<TextInput.Icon icon="account" />}
+                                />
+                                <TextInput
+                                    label="Last Name *"
+                                    style={[styles.input, styles.halfInput]}
+                                    value={formData.lastName}
+                                    onChangeText={(value) => handleInputChange('lastName', value)}
+                                    mode="outlined"
+                                    left={<TextInput.Icon icon="account-outline" />}
+                                />
+                            </View>
 
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Email Address *"
-                        placeholderTextColor={'#4f4d57'}
-                        value={formData.email}
-                        onChangeText={(value) => handleInputChange('email', value)}
-                        keyboardType="email-address"
-                        autoCapitalize="none"
-                    />
-
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Phone Number *"
-                        placeholderTextColor={'#4f4d57'}
-                        value={formData.phone}
-                        onChangeText={(value) => handleInputChange('phone', value)}
-                        keyboardType="phone-pad"
-                    />
-
-                    <View style={styles.row}>
-                        <TextInput
-                            style={[styles.input, styles.halfInput]}
-                            placeholder="Password *"
-                            placeholderTextColor={'#4f4d57'}
-                            value={formData.password}
-                            onChangeText={(value) => handleInputChange('password', value)}
-                            secureTextEntry
-                        />
-                        <TextInput
-                            style={[styles.input, styles.halfInput]}
-                            placeholder="Confirm Password *"
-                            placeholderTextColor={'#4f4d57'}
-                            value={formData.confirmPassword}
-                            onChangeText={(value) => handleInputChange('confirmPassword', value)}
-                            secureTextEntry
-                        />
-                    </View>
-
-                    <Text style={styles.sectionTitle}>Guide Information</Text>
-
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Primary Location/City *"
-                        placeholderTextColor={'#4f4d57'}
-                        value={formData.location}
-                        onChangeText={(value) => handleInputChange('location', value)}
-                    />
-
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Years of Experience *"
-                        placeholderTextColor={'#4f4d57'}
-                        value={formData.experience}
-                        onChangeText={(value) => handleInputChange('experience', value)}
-                        keyboardType="numeric"
-                    />
-
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Languages Spoken (e.g., English, Bengali, Hindi)"
-                        placeholderTextColor={'#4f4d57'}
-                        value={formData.languages}
-                        onChangeText={(value) => handleInputChange('languages', value)}
-                    />
-
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Specialties (e.g., Historical sites, Nature tours)"
-                        placeholderTextColor={'#4f4d57'}
-                        value={formData.specialties}
-                        onChangeText={(value) => handleInputChange('specialties', value)}
-                    />
-
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Daily Rate (BDT) *"
-                        placeholderTextColor={'#4f4d57'}
-                        value={formData.pricePerDay}
-                        onChangeText={(value) => handleInputChange('pricePerDay', value)}
-                        keyboardType="numeric"
-                    />
-
-                    <TextInput
-                        style={[styles.input, styles.textArea]}
-                        placeholder="Tell us about yourself and your guiding experience..."
-                        placeholderTextColor={'#4f4d57'}
-                        value={formData.bio}
-                        onChangeText={(value) => handleInputChange('bio', value)}
-                        multiline
-                        numberOfLines={4}
-                        textAlignVertical="top"
-                    />
-
-                    <Text style={styles.sectionTitle}>Profile Picture</Text>
-                    
-                    <TextInput
-                        style={styles.input}
-                        placeholder="Profile Image URL (optional)"
-                        placeholderTextColor={'#4f4d57'}
-                        value={formData.imageUrl}
-                        onChangeText={(value) => handleInputChange('imageUrl', value)}
-                        autoCapitalize="none"
-                    />
-                    
-                    {formData.imageUrl && (
-                        <View style={styles.imagePreviewContainer}>
-                            <Text style={styles.imagePreviewTitle}>Profile Picture Preview:</Text>
-                            <Image
-                                source={{ uri: formData.imageUrl }}
-                                style={styles.imagePreview}
-                                onError={() => {
-                                    Alert.alert('Invalid Image URL', 'Please enter a valid image URL');
-                                }}
+                            <TextInput
+                                label="Email Address *"
+                                style={styles.input}
+                                value={formData.email}
+                                onChangeText={(value) => handleInputChange('email', value)}
+                                keyboardType="email-address"
+                                autoCapitalize="none"
+                                mode="outlined"
+                                left={<TextInput.Icon icon="email" />}
                             />
-                        </View>
-                    )}
 
-                    <View style={styles.infoBox}>
-                        <Text style={styles.infoTitle}>📋 Application Process</Text>
-                        <Text style={styles.infoText}>
-                            • Your application will be reviewed by our team{'\n'}
-                            • We may contact you for additional verification{'\n'}
-                            • Approval typically takes 1-3 business days{'\n'}
-                            • You&apos;ll receive an email once approved
-                        </Text>
-                    </View>
+                            <TextInput
+                                label="Phone Number *"
+                                style={styles.input}
+                                value={formData.phone}
+                                onChangeText={(value) => handleInputChange('phone', value)}
+                                keyboardType="phone-pad"
+                                mode="outlined"
+                                left={<TextInput.Icon icon="phone" />}
+                            />
 
-                    <TouchableOpacity
-                        style={[styles.submitButton, loading && styles.disabledButton]}
+                            <TextInput
+                                label="Password *"
+                                style={styles.input}
+                                value={formData.password}
+                                onChangeText={(value) => handleInputChange('password', value)}
+                                secureTextEntry
+                                mode="outlined"
+                                left={<TextInput.Icon icon="lock" />}
+                            />
+                            
+                            <TextInput
+                                label="Confirm Password *"
+                                style={styles.input}
+                                value={formData.confirmPassword}
+                                onChangeText={(value) => handleInputChange('confirmPassword', value)}
+                                secureTextEntry
+                                mode="outlined"
+                                left={<TextInput.Icon icon="lock-check" />}
+                            />
+                        </Card.Content>
+                    </Card>
+
+                    <Card style={styles.card}>
+                        <Card.Content>
+                            <Text style={styles.sectionTitle}>Guide Information</Text>
+
+                            <TextInput
+                                label="Primary Location/City *"
+                                style={styles.input}
+                                value={formData.location}
+                                onChangeText={(value) => handleInputChange('location', value)}
+                                mode="outlined"
+                                left={<TextInput.Icon icon="map-marker" />}
+                            />
+
+                            <TextInput
+                                label="Years of Experience *"
+                                style={styles.input}
+                                value={formData.experience}
+                                onChangeText={(value) => handleInputChange('experience', value)}
+                                keyboardType="numeric"
+                                mode="outlined"
+                                left={<TextInput.Icon icon="briefcase" />}
+                            />
+
+                            <TextInput
+                                label="Languages Spoken"
+                                style={styles.input}
+                                value={formData.languages}
+                                onChangeText={(value) => handleInputChange('languages', value)}
+                                mode="outlined"
+                                left={<TextInput.Icon icon="translate" />}
+                                placeholder="e.g., English, Bengali, Hindi"
+                            />
+
+                            <TextInput
+                                label="Specialties"
+                                style={styles.input}
+                                value={formData.specialties}
+                                onChangeText={(value) => handleInputChange('specialties', value)}
+                                mode="outlined"
+                                left={<TextInput.Icon icon="star" />}
+                                placeholder="e.g., Historical sites, Nature tours"
+                            />
+
+                            <TextInput
+                                label="Daily Rate (BDT) *"
+                                style={styles.input}
+                                value={formData.pricePerDay}
+                                onChangeText={(value) => handleInputChange('pricePerDay', value)}
+                                keyboardType="numeric"
+                                mode="outlined"
+                                left={<TextInput.Icon icon="cash" />}
+                            />
+
+                            <TextInput
+                                label="Tell us about yourself"
+                                style={styles.input}
+                                value={formData.bio}
+                                onChangeText={(value) => handleInputChange('bio', value)}
+                                multiline
+                                numberOfLines={4}
+                                mode="outlined"
+                                placeholder="Share your guiding experience and passion..."
+                            />
+                        </Card.Content>
+                    </Card>
+
+                    <Card style={styles.card}>
+                        <Card.Content>
+                            <Text style={styles.sectionTitle}>Profile Picture</Text>
+                            
+                            <TextInput
+                                label="Profile Image URL (optional)"
+                                style={styles.input}
+                                value={formData.imageUrl}
+                                onChangeText={(value) => handleInputChange('imageUrl', value)}
+                                autoCapitalize="none"
+                                mode="outlined"
+                                left={<TextInput.Icon icon="image" />}
+                            />
+                            
+                            {formData.imageUrl && (
+                                <View style={styles.imagePreviewContainer}>
+                                    <Text style={styles.imagePreviewTitle}>Profile Picture Preview:</Text>
+                                    <Image
+                                        source={{ uri: formData.imageUrl }}
+                                        style={styles.imagePreview}
+                                        onError={() => {
+                                            Alert.alert('Invalid Image URL', 'Please enter a valid image URL');
+                                        }}
+                                    />
+                                </View>
+                            )}
+                        </Card.Content>
+                    </Card>
+
+                    <Card style={styles.infoCard}>
+                        <Card.Content>
+                            <Text style={styles.infoTitle}>📋 Application Process</Text>
+                            <Text style={styles.infoText}>
+                                • Your application will be reviewed by our team{'\n'}
+                                • We may contact you for additional verification{'\n'}
+                                • Approval typically takes 1-3 business days{'\n'}
+                                • You&apos;ll receive an email once approved
+                            </Text>
+                        </Card.Content>
+                    </Card>
+
+                    <Button
+                        mode="contained"
                         onPress={handleSignup}
+                        loading={loading}
                         disabled={loading}
+                        style={styles.submitButton}
+                        contentStyle={styles.submitButtonContent}
+                        labelStyle={styles.submitButtonText}
                     >
-                        <Text style={styles.submitButtonText}>
-                            {loading ? 'Submitting Application...' : 'Submit Application'}
-                        </Text>
-                    </TouchableOpacity>
+                        {loading ? 'Submitting Application...' : 'Submit Application'}
+                    </Button>
 
                     <TouchableOpacity
                         style={styles.backButton}
                         onPress={() => router.back()}
                     >
                         <Text style={styles.backButtonText}>
-                            Already have an account? Sign In
+                            Already have an account? <Text style={styles.signInText}>Sign In</Text>
                         </Text>
                     </TouchableOpacity>
                 </View>
@@ -339,87 +380,85 @@ const GuideSignup = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f8f9fa',
+        backgroundColor: '#F5F5F5',
     },
     header: {
         alignItems: 'center',
-        paddingVertical: 30,
+        paddingVertical: 40,
         paddingHorizontal: 20,
         backgroundColor: '#6200EE',
-        borderBottomLeftRadius: 25,
-        borderBottomRightRadius: 25,
+        borderBottomLeftRadius: 30,
+        borderBottomRightRadius: 30,
+        elevation: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 5,
     },
     headerImage: {
-        width: 80,
-        height: 80,
-        borderRadius: 40,
+        width: 100,
+        height: 100,
+        borderRadius: 50,
         marginBottom: 15,
-        borderWidth: 3,
+        borderWidth: 4,
         borderColor: '#FFFFFF',
     },
     title: {
-        fontSize: 28,
+        fontSize: 32,
         fontWeight: 'bold',
         color: '#FFFFFF',
-        marginBottom: 8,
+        marginBottom: 10,
         textAlign: 'center',
     },
     subtitle: {
         fontSize: 16,
         color: '#E8EAED',
         textAlign: 'center',
+        paddingHorizontal: 20,
     },
-    form: {
+    formContainer: {
         padding: 20,
+        paddingBottom: 40,
+    },
+    card: {
+        marginBottom: 20,
+        borderRadius: 15,
+        elevation: 4,
+        backgroundColor: '#FFFFFF',
     },
     sectionTitle: {
         fontSize: 20,
         fontWeight: 'bold',
         color: '#333',
-        marginTop: 20,
         marginBottom: 15,
+        paddingBottom: 10,
+        borderBottomWidth: 2,
+        borderBottomColor: '#6200EE',
     },
     row: {
         flexDirection: 'row',
         justifyContent: 'space-between',
+        gap: 10,
     },
     input: {
         backgroundColor: '#FFFFFF',
-        borderRadius: 8,
-        paddingHorizontal: 15,
-        paddingVertical: 12,
-        fontSize: 16,
         marginBottom: 15,
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
     },
     halfInput: {
-        width: '48%',
-    },
-    textArea: {
-        height: 100,
-        textAlignVertical: 'top',
+        flex: 1,
     },
     imagePreviewContainer: {
         alignItems: 'center',
-        marginBottom: 20,
-        backgroundColor: '#FFFFFF',
-        borderRadius: 8,
+        marginTop: 15,
         padding: 15,
-        elevation: 2,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 2,
+        backgroundColor: '#F8F9FA',
+        borderRadius: 10,
     },
     imagePreviewTitle: {
         fontSize: 16,
         fontWeight: '600',
         color: '#333',
-        marginBottom: 10,
+        marginBottom: 15,
     },
     imagePreview: {
         width: 120,
@@ -429,48 +468,48 @@ const styles = StyleSheet.create({
         borderColor: '#6200EE',
         backgroundColor: '#f0f0f0',
     },
-    infoBox: {
+    infoCard: {
+        marginBottom: 25,
+        borderRadius: 15,
+        elevation: 3,
         backgroundColor: '#E3F2FD',
-        borderRadius: 8,
-        padding: 15,
-        marginBottom: 20,
-        borderLeftWidth: 4,
+        borderLeftWidth: 5,
         borderLeftColor: '#2196F3',
     },
     infoTitle: {
-        fontSize: 16,
+        fontSize: 18,
         fontWeight: 'bold',
         color: '#1976D2',
-        marginBottom: 8,
+        marginBottom: 12,
     },
     infoText: {
         fontSize: 14,
-        color: '#1976D2',
-        lineHeight: 20,
+        color: '#1565C0',
+        lineHeight: 24,
     },
     submitButton: {
-        backgroundColor: '#6200EE',
-        borderRadius: 8,
-        paddingVertical: 15,
-        alignItems: 'center',
         marginBottom: 15,
+        borderRadius: 10,
+        elevation: 4,
     },
-    disabledButton: {
-        backgroundColor: '#ccc',
+    submitButtonContent: {
+        paddingVertical: 8,
     },
     submitButtonText: {
-        color: '#FFFFFF',
         fontSize: 18,
         fontWeight: 'bold',
     },
     backButton: {
         alignItems: 'center',
-        paddingVertical: 10,
+        paddingVertical: 15,
     },
     backButtonText: {
-        color: '#6200EE',
+        color: '#666',
         fontSize: 16,
-        fontWeight: '600',
+    },
+    signInText: {
+        color: '#6200EE',
+        fontWeight: 'bold',
     },
 });
 

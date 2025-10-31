@@ -42,6 +42,7 @@ const AdminDashboard = () => {
         pendingBookings: 0,
         confirmedBookings: 0,
         pendingGuideApplications: 0,
+        verifiedPendingApplications: 0,
     });
     const [selectedItem, setSelectedItem] = useState(null);
     const [modalVisible, setModalVisible] = useState(false);
@@ -208,13 +209,14 @@ const AdminDashboard = () => {
 
     const fetchStats = async () => {
         try {
-            const [usersSnap, guidesSnap, bookingsSnap, pendingSnap, confirmedSnap, pendingApplicationsSnap] = await Promise.all([
+            const [usersSnap, guidesSnap, bookingsSnap, pendingSnap, confirmedSnap, pendingApplicationsSnap, verifiedPendingApplicationsSnap] = await Promise.all([
                 getCountFromServer(collection(db, 'Users')),
                 getCountFromServer(collection(db, 'guides')),
                 getCountFromServer(collection(db, 'bookings')),
                 getCountFromServer(query(collection(db, 'bookings'), where('status', '==', 'pending'))),
                 getCountFromServer(query(collection(db, 'bookings'), where('status', '==', 'confirmed'))),
                 getCountFromServer(query(collection(db, 'guide-applications'), where('status', '==', 'pending'))),
+                getCountFromServer(query(collection(db, 'guide-applications'), where('status', '==', 'pending'), where('emailVerified', '==', true))),
             ]);
 
             setStats({
@@ -224,6 +226,7 @@ const AdminDashboard = () => {
                 pendingBookings: pendingSnap.data().count,
                 confirmedBookings: confirmedSnap.data().count,
                 pendingGuideApplications: pendingApplicationsSnap.data().count,
+                verifiedPendingApplications: verifiedPendingApplicationsSnap.data().count,
             });
         } catch (_error) {
             console.error('Error fetching stats:', _error);
@@ -276,11 +279,18 @@ const AdminDashboard = () => {
                                 approvedAt: new Date(),
                             });
 
+                            // Update Users collection to allow login
+                            await updateDoc(doc(db, 'Users', applicationId), {
+                                canLogin: true,
+                                approvedAt: new Date(),
+                            });
+
                             fetchGuideApplications();
                             fetchGuides();
                             fetchStats();
-                            Alert.alert('Success', 'Guide application approved successfully');
+                            Alert.alert('Success', 'Guide application approved successfully. The guide can now login.');
                         } catch (_error) {
+                            console.error('Error approving guide:', _error);
                             Alert.alert('Error', 'Failed to approve guide application');
                         }
                     },
@@ -558,14 +568,17 @@ const AdminDashboard = () => {
                 <Text style={styles.itemTitle}>{item.name}</Text>
                 <Text style={styles.itemSubtitle}>{item.email} | {item.location}</Text>
                 <Text style={styles.itemMeta}>
-                    Status: {item.status} | Applied: {item.appliedAt?.toDate?.()?.toLocaleDateString() || 'N/A'}
+                    Status: {item.status} | Email: {item.emailVerified ? '✅ Verified' : '❌ Not Verified'}
+                </Text>
+                <Text style={styles.itemMeta}>
+                    Applied: {item.appliedAt?.toDate?.()?.toLocaleDateString() || 'N/A'}
                 </Text>
                 <Text style={styles.itemMeta}>
                     Experience: {item.experience} years | Price: ৳{item.pricePerDay}/day
                 </Text>
             </View>
             <View style={styles.itemActions}>
-                {item.status === 'pending' && (
+                {item.status === 'pending' && item.emailVerified && (
                     <>
                         <TouchableOpacity
                             style={[styles.actionButton, styles.approveButton]}
@@ -580,6 +593,11 @@ const AdminDashboard = () => {
                             <Text style={styles.actionButtonText}>Reject</Text>
                         </TouchableOpacity>
                     </>
+                )}
+                {item.status === 'pending' && !item.emailVerified && (
+                    <View style={styles.pendingVerificationBadge}>
+                        <Text style={styles.pendingVerificationText}>Awaiting Email Verification</Text>
+                    </View>
                 )}
                 <TouchableOpacity
                     style={[styles.actionButton, styles.viewButton]}
@@ -631,6 +649,7 @@ const AdminDashboard = () => {
                             {renderStatCard('Pending Bookings', stats.pendingBookings, '#F44336')}
                             {renderStatCard('Confirmed Bookings', stats.confirmedBookings, '#4CAF50')}
                             {renderStatCard('Pending Applications', stats.pendingGuideApplications, '#795548')}
+                            {renderStatCard('Ready to Approve', stats.verifiedPendingApplications || 0, '#4CAF50')}
                             {renderStatCard('Total Locations', locations.length, '#607D8B')}
                         </View>
                         
@@ -642,6 +661,7 @@ const AdminDashboard = () => {
                             <Text style={styles.activityItem}>⏳ {stats.pendingBookings} bookings pending review</Text>
                             <Text style={styles.activityItem}>✅ {stats.confirmedBookings} bookings confirmed</Text>
                             <Text style={styles.activityItem}>📋 {stats.pendingGuideApplications} guide applications pending</Text>
+                            <Text style={styles.activityItem}>✅ {stats.verifiedPendingApplications || 0} applications ready to approve (email verified)</Text>
                             <Text style={styles.activityItem}>
                                 📍 {locations.length} total locations ({locations.length} admin-added)
                             </Text>
@@ -1421,6 +1441,22 @@ const styles = StyleSheet.create({
     statusIcon: {
         fontSize: 16,
         marginRight: 5,
+    },
+    
+    // Email Verification Badge Styles
+    pendingVerificationBadge: {
+        backgroundColor: '#FFF3CD',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#FFC107',
+        marginRight: 8,
+    },
+    pendingVerificationText: {
+        color: '#856404',
+        fontSize: 12,
+        fontWeight: '600',
     },
     statusText: {
         fontSize: 12,
