@@ -46,9 +46,12 @@ const Login = () => {
             
             const userData = userDoc.data();
             
+            console.log('User type:', userData.userType);
+            
             // Handle email verification based on user type
-            if (!refreshedUser.emailVerified) {
-                // Send verification email
+            // Regular users (tourists) don't need email verification
+            if (userData.userType !== 'user' && !refreshedUser.emailVerified) {
+                // Only require email verification for admin and guide users
                 try {
                     const actionCodeSettings = {
                         url: 'https://tourease-4cd42.firebaseapp.com',
@@ -69,8 +72,9 @@ const Login = () => {
                 return;
             }
             
-            // Email is verified - Update Firestore if not already marked as verified
-            if (!userData.emailVerified) {
+            // Email is verified (or user is regular tourist who doesn't need verification)
+            // Update Firestore if email is verified but not marked in database
+            if (refreshedUser.emailVerified && !userData.emailVerified) {
                 try {
                     await updateDoc(doc(db, 'Users', refreshedUser.uid), {
                         emailVerified: true,
