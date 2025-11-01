@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { sendEmailVerification, signInWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, limit, query, updateDoc } from "firebase/firestore";
 import { useState } from "react";
 import {
     Alert,
@@ -13,10 +13,76 @@ import {
 import { Button, Card, TextInput } from "react-native-paper";
 import { auth, db } from "../(auth)/firebase";
 import "../../global.css";
+import { sendTestNotification } from "../../utils/notificationService";
 
 const Login = () => {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [testingNotification, setTestingNotification] = useState(false);
+
+    const handleTestNotification = async () => {
+        setTestingNotification(true);
+        try {
+            // Fetch data from a test collection in Firestore
+            console.log('Fetching test data from Firestore...');
+            
+            // Try to get data from 'test' collection, or use Users collection as fallback
+            const testQuery = query(collection(db, 'test'), limit(1));
+            let testData = null;
+            
+            try {
+                const testSnapshot = await getDocs(testQuery);
+                if (!testSnapshot.empty) {
+                    testData = testSnapshot.docs[0].data();
+                    console.log('Test data found:', testData);
+                }
+            } catch (_error) {
+                console.log('Test collection not found, using fallback data');
+            }
+            
+            // If no test collection, create demo data
+            if (!testData) {
+                testData = {
+                    title: "Test Notification",
+                    message: "This is a test notification from TourEase!",
+                    timestamp: new Date().toISOString(),
+                    type: "test"
+                };
+            }
+            
+            // Send notification with fetched data
+            const title = testData.title || "Test Notification";
+            const body = testData.message || testData.description || "Notification test successful! ✅";
+            
+            console.log('Sending notification:', { title, body });
+            const result = await sendTestNotification(title, body, testData);
+            
+            if (result.success) {
+                Alert.alert(
+                    '✅ Notification Sent!',
+                    `Title: ${title}\n\nBody: ${body}\n\nCheck your notification bar!`,
+                    [{ text: 'OK' }]
+                );
+                console.log('Notification sent successfully:', result.notificationId);
+            } else {
+                Alert.alert(
+                    '❌ Notification Failed',
+                    `Error: ${result.error}\n\nPlease check notification permissions in your device settings.`,
+                    [{ text: 'OK' }]
+                );
+                console.error('Notification failed:', result.error);
+            }
+        } catch (error) {
+            console.error('Error testing notification:', error);
+            Alert.alert(
+                'Error',
+                `Failed to test notification: ${error.message}`,
+                [{ text: 'OK' }]
+            );
+        } finally {
+            setTestingNotification(false);
+        }
+    };
 
     const handleLogin = async () => {
         if (!email || !password) {
@@ -196,6 +262,19 @@ const Login = () => {
                         >
                             Sign In
                         </Button>
+
+                        {/* Test Notification Button */}
+                        {/* <Button
+                            style={[styles.button, styles.testButton]}
+                            mode="outlined"
+                            onPress={handleTestNotification}
+                            loading={testingNotification}
+                            disabled={testingNotification}
+                            icon="bell-ring"
+                        >
+                            Test Notification
+                        </Button> */}
+
                         <View style={styles.footer}>
                             <TouchableOpacity
                                 onPress={() => router.push("/signup")}
@@ -307,6 +386,12 @@ const styles = StyleSheet.create({
         borderRadius: 5,
         fontWeight: "bold",
         backgroundColor: "#6200EE",
+    },
+    testButton: {
+        backgroundColor: "transparent",
+        borderColor: "#FF9800",
+        borderWidth: 2,
+        marginTop: 5,
     },
     footer: {
         marginTop: 20,

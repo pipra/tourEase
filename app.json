@@ -4,7 +4,7 @@
     "slug": "TourEase",
     "version": "1.0.0",
     "orientation": "portrait",
-  "icon": "./assets/images/tourEase.png",
+    "icon": "./assets/images/tourEase.png",
     "scheme": "tourease",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -39,6 +39,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "5ebae64c-6417-4d77-af33-f854b00e9d3a"
+      }
     }
   }
 }

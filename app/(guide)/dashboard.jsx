@@ -1,3 +1,4 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { router } from 'expo-router';
 import { signOut } from 'firebase/auth';
@@ -20,13 +21,15 @@ import {
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
+import { TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db } from '../(auth)/firebase';
 import newBookingService from '../../utils/newBookingService';
+import { requestNotificationPermissions } from '../../utils/notificationService';
+import { deleteNotification, listenForGuideNotifications, sendBookingResponseToUser } from '../../utils/realtimeNotificationService';
 
 const GuideDashboard = () => {
     const [activeTab, setActiveTab] = useState('profile');
@@ -43,6 +46,7 @@ const GuideDashboard = () => {
     const [newBookings, setNewBookings] = useState([]);
     const [currentNewBookingIndex, setCurrentNewBookingIndex] = useState(0);
     const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+    const [guideNotifications, setGuideNotifications] = useState([]);
     const [stats, setStats] = useState({
         totalBookings: 0,
         pendingBookings: 0,
@@ -234,6 +238,45 @@ const GuideDashboard = () => {
         };
     }, [initialLoadComplete]); // Include initialLoadComplete in dependencies
 
+    // Set up notification listener for booking requests
+    useEffect(() => {
+        let unsubscribe;
+
+        const setupNotificationListener = async () => {
+            const currentUser = auth.currentUser;
+            if (!currentUser?.uid) return;
+
+            try {
+                // Request notification permissions
+                await requestNotificationPermissions();
+
+                // Listen for new booking request notifications
+                unsubscribe = listenForGuideNotifications(currentUser.uid, (notifications) => {
+                    console.log('Guide notifications updated:', notifications.length);
+                    
+                    // Store notifications in state
+                    setGuideNotifications(notifications);
+                    
+                    // Trigger a data refresh to show the new booking
+                    fetchData();
+                });
+
+                console.log('Notification listener set up successfully');
+            } catch (error) {
+                console.error('Error setting up notification listener:', error);
+            }
+        };
+
+        setupNotificationListener();
+
+        // Cleanup on unmount
+        return () => {
+            if (unsubscribe) {
+                unsubscribe();
+            }
+        };
+    }, [fetchData]);
+
     // Auto-refresh when screen comes into focus
     useFocusEffect(
         useCallback(() => {
@@ -243,10 +286,28 @@ const GuideDashboard = () => {
 
     const handleBookingStatusUpdate = async (bookingId, newStatus) => {
         try {
+            // Get the booking data first to access user info
+            const bookingToUpdate = bookings.find(b => b.id === bookingId);
+            
             await updateDoc(doc(db, 'bookings', bookingId), {
                 status: newStatus,
                 updatedAt: new Date(),
             });
+            
+            // Send notification to user about booking response
+            if (bookingToUpdate && bookingToUpdate.userId) {
+                const responseData = {
+                    bookingId: bookingId,
+                    status: newStatus,
+                    guideName: guideData?.name || 'Your guide',
+                    location: bookingToUpdate.location || 'Location',
+                    dates: bookingToUpdate.dates || bookingToUpdate.date || 'Date',
+                    totalPrice: bookingToUpdate.totalPrice || 0
+                };
+                
+                await sendBookingResponseToUser(bookingToUpdate.userId, responseData);
+                console.log('Booking response notification sent to user');
+            }
             
             Alert.alert('Success', `Booking ${newStatus} successfully`);
             fetchData();
@@ -574,7 +635,13 @@ const GuideDashboard = () => {
     };
 
     const renderProfileTab = () => (
-        <ScrollView style={styles.profileContainer} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+            style={styles.profileContainer} 
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={fetchData} />
+            }
+        >
             {guideData && (
                 <>
                     {/* Profile Header Card */}
@@ -670,8 +737,81 @@ const GuideDashboard = () => {
         </ScrollView>
     );
 
+    const renderNotificationsTab = () => (
+        <View style={styles.notificationsContainer}>
+            <Text style={styles.sectionTitle}>Booking Notifications</Text>
+            {guideNotifications.length > 0 ? (
+                <FlatList
+                    data={guideNotifications}
+                    renderItem={({ item }) => (
+                        <View style={styles.notificationCard}>
+                            <View style={styles.notificationHeader}>
+                                <Text style={styles.notificationTitle}>{item.title}</Text>
+                                <TouchableOpacity
+                                    onPress={async () => {
+                                        await deleteNotification(item.id, 'guide');
+                                    }}
+                                    style={styles.deleteButton}
+                                >
+                                    <MaterialIcons name="close" size={20} color="#666" />
+                                </TouchableOpacity>
+                            </View>
+                            <Text style={styles.notificationMessage}>{item.message}</Text>
+                            {item.data && (
+                                <View style={styles.notificationDetails}>
+                                    <Text style={styles.notificationDetailText}>
+                                        👤 {item.data.userName}
+                                    </Text>
+                                    <Text style={styles.notificationDetailText}>
+                                        📍 {item.data.location}
+                                    </Text>
+                                    <Text style={styles.notificationDetailText}>
+                                        📅 {item.data.dates}
+                                    </Text>
+                                    <Text style={styles.notificationDetailText}>
+                                        👥 {item.data.guests} guests
+                                    </Text>
+                                    <Text style={styles.notificationDetailText}>
+                                        💰 ৳{item.data.totalPrice}
+                                    </Text>
+                                </View>
+                            )}
+                            <Text style={styles.notificationTime}>
+                                {new Date(item.timestamp).toLocaleString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                })}
+                            </Text>
+                        </View>
+                    )}
+                    keyExtractor={(item) => item.id}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={styles.notificationsList}
+                    refreshControl={
+                        <RefreshControl refreshing={refreshing} onRefresh={fetchData} />
+                    }
+                />
+            ) : (
+                <View style={styles.emptyNotifications}>
+                    <Text style={styles.emptyNotificationsText}>No notifications yet</Text>
+                    <Text style={styles.emptyNotificationsSubtext}>
+                        You&apos;ll receive notifications when users book your services
+                    </Text>
+                </View>
+            )}
+        </View>
+    );
+
     const renderStatsTab = () => (
-        <View style={styles.statsContainer}>
+        <ScrollView 
+            style={styles.statsContainer}
+            refreshControl={
+                <RefreshControl refreshing={refreshing} onRefresh={fetchData} />
+            }
+            showsVerticalScrollIndicator={false}
+        >
             <View style={styles.statsGrid}>
                 <View style={styles.statCard}>
                     <Text style={styles.statNumber}>{stats.totalBookings}</Text>
@@ -690,7 +830,7 @@ const GuideDashboard = () => {
                     <Text style={styles.statLabel}>Total Earnings</Text>
                 </View>
             </View>
-        </View>
+        </ScrollView>
     );
 
     const getStatusColor = (status) => {
@@ -724,7 +864,7 @@ const GuideDashboard = () => {
                         <Text style={styles.logoutText}>🔔</Text>
                     </TouchableOpacity> */}
                     <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-                        <Text style={styles.logoutText}>Logout</Text>
+                        <Text style={styles.logoutText}>Sign Out</Text>
                     </TouchableOpacity>
                 </View>
             </View>
@@ -747,6 +887,17 @@ const GuideDashboard = () => {
                     </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
+                    style={[styles.tab, activeTab === 'notifications' && styles.activeTab]}
+                    onPress={() => setActiveTab('notifications')}
+                >
+                    <Text style={[styles.tabText, activeTab === 'notifications' && styles.activeTabText]}>
+                        Notifications
+                        {guideNotifications.length > 0 && (
+                            <Text style={styles.notificationBadge}> ({guideNotifications.length})</Text>
+                        )}
+                    </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
                     style={[styles.tab, activeTab === 'stats' && styles.activeTab]}
                     onPress={() => setActiveTab('stats')}
                 >
@@ -758,6 +909,7 @@ const GuideDashboard = () => {
 
             <View style={styles.content}>
                 {activeTab === 'profile' && renderProfileTab()}
+                {activeTab === 'notifications' && renderNotificationsTab()}
                 
                 {activeTab === 'bookings' && (
                     <View style={styles.bookingsContainer}>
@@ -861,33 +1013,42 @@ const GuideDashboard = () => {
                         <Text style={styles.modalTitle}>Edit Profile</Text>
                         
                         <TextInput
-                            style={styles.modalInput}
-                            placeholder="Bio"
+                            label="Bio"
                             value={editForm.bio}
                             onChangeText={(text) => setEditForm({ ...editForm, bio: text })}
+                            style={styles.input}
+                            mode="outlined"
                             multiline
+                            numberOfLines={3}
+                            left={<TextInput.Icon icon="text" />}
                         />
                         
                         <TextInput
-                            style={styles.modalInput}
-                            placeholder="Languages"
+                            label="Languages"
                             value={editForm.languages}
                             onChangeText={(text) => setEditForm({ ...editForm, languages: text })}
+                            style={styles.input}
+                            mode="outlined"
+                            left={<TextInput.Icon icon="translate" />}
                         />
                         
                         <TextInput
-                            style={styles.modalInput}
-                            placeholder="Specialties"
+                            label="Specialties"
                             value={editForm.specialties}
                             onChangeText={(text) => setEditForm({ ...editForm, specialties: text })}
+                            style={styles.input}
+                            mode="outlined"
+                            left={<TextInput.Icon icon="star" />}
                         />
                         
                         <TextInput
-                            style={styles.modalInput}
-                            placeholder="Daily Rate"
+                            label="Daily Rate"
                             value={editForm.pricePerDay?.toString()}
                             onChangeText={(text) => setEditForm({ ...editForm, pricePerDay: parseInt(text) || 0 })}
                             keyboardType="numeric"
+                            style={styles.input}
+                            mode="outlined"
+                            left={<TextInput.Icon icon="currency-bdt" />}
                         />
 
                         <View style={styles.modalActions}>
@@ -1622,6 +1783,10 @@ const styles = StyleSheet.create({
         fontSize: 16,
         marginBottom: 15,
     },
+    input: {
+        marginBottom: 15,
+        backgroundColor: 'white',
+    },
     modalActions: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -1979,6 +2144,94 @@ const styles = StyleSheet.create({
         color: '#666',
         fontSize: 14,
         fontWeight: '600',
+    },
+    // Notifications Tab Styles
+    notificationsContainer: {
+        flex: 1,
+        backgroundColor: '#f8f9fa',
+    },
+    sectionTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#333',
+        padding: 20,
+        paddingBottom: 10,
+    },
+    notificationsList: {
+        padding: 20,
+        paddingTop: 10,
+    },
+    notificationCard: {
+        backgroundColor: 'white',
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 12,
+        borderLeftWidth: 4,
+        borderLeftColor: '#6200EE',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    notificationHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 8,
+    },
+    notificationTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#333',
+        flex: 1,
+        marginRight: 8,
+    },
+    deleteButton: {
+        padding: 4,
+    },
+    notificationMessage: {
+        fontSize: 14,
+        color: '#666',
+        lineHeight: 20,
+        marginBottom: 12,
+    },
+    notificationDetails: {
+        backgroundColor: '#f8f9fa',
+        padding: 12,
+        borderRadius: 8,
+        marginBottom: 8,
+    },
+    notificationDetailText: {
+        fontSize: 13,
+        color: '#555',
+        marginBottom: 4,
+    },
+    notificationTime: {
+        fontSize: 12,
+        color: '#999',
+        marginTop: 4,
+    },
+    notificationBadge: {
+        color: '#6200EE',
+        fontWeight: 'bold',
+    },
+    emptyNotifications: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 40,
+    },
+    emptyNotificationsText: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#666',
+        marginBottom: 8,
+    },
+    emptyNotificationsSubtext: {
+        fontSize: 14,
+        color: '#999',
+        textAlign: 'center',
     },
 });
 

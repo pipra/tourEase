@@ -17,13 +17,15 @@ import {
     Alert,
     FlatList,
     Modal,
+    RefreshControl,
+    TextInput as RNTextInput,
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
     TouchableOpacity,
     View
 } from 'react-native';
+import { TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db } from '../(auth)/firebase';
 
@@ -48,6 +50,7 @@ const AdminDashboard = () => {
     const [modalVisible, setModalVisible] = useState(false);
     const [locationModalVisible, setLocationModalVisible] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+    const [refreshing, setRefreshing] = useState(false);
     const [bookingStatusFilter, setBookingStatusFilter] = useState('all');
     const [locationForm, setLocationForm] = useState({
         name: '',
@@ -114,6 +117,12 @@ const AdminDashboard = () => {
         } catch (_error) {
             console.error('Error fetching data:', _error);
         }
+    };
+
+    const onRefresh = async () => {
+        setRefreshing(true);
+        await fetchData();
+        setRefreshing(false);
     };
 
     const fetchUsers = async () => {
@@ -637,10 +646,21 @@ const AdminDashboard = () => {
             return matchesSearch && matchesStatus;
         });
 
+        const filteredReviews = reviews.filter(review =>
+            review.guideName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            review.userName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            review.review?.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+
         switch (activeTab) {
             case 'overview':
                 return (
-                    <ScrollView style={styles.tabContent}>
+                    <ScrollView 
+                        style={styles.tabContent}
+                        refreshControl={
+                            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                        }
+                    >
                         <Text style={styles.tabTitle}>Dashboard Overview</Text>
                         <View style={styles.statsContainer}>
                             {renderStatCard('Total Users', stats.totalUsers, '#2196F3')}
@@ -699,6 +719,9 @@ const AdminDashboard = () => {
                             renderItem={renderUserItem}
                             keyExtractor={(item) => item.id}
                             showsVerticalScrollIndicator={false}
+                            refreshControl={
+                                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                            }
                         />
                     </View>
                 );
@@ -711,6 +734,9 @@ const AdminDashboard = () => {
                             renderItem={renderGuideItem}
                             keyExtractor={(item) => item.id}
                             showsVerticalScrollIndicator={false}
+                            refreshControl={
+                                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                            }
                         />
                     </View>
                 );
@@ -723,6 +749,9 @@ const AdminDashboard = () => {
                             renderItem={renderGuideApplicationItem}
                             keyExtractor={(item) => item.id}
                             showsVerticalScrollIndicator={false}
+                            refreshControl={
+                                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                            }
                             ListEmptyComponent={
                                 <Text style={styles.emptyState}>No guide applications found</Text>
                             }
@@ -772,6 +801,9 @@ const AdminDashboard = () => {
                             renderItem={renderBookingItem}
                             keyExtractor={(item) => item.id}
                             showsVerticalScrollIndicator={false}
+                            refreshControl={
+                                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                            }
                             ListEmptyComponent={
                                 <Text style={styles.emptyState}>No bookings found for the selected filter</Text>
                             }
@@ -783,10 +815,13 @@ const AdminDashboard = () => {
                     <View style={styles.tabContent}>
                         <Text style={styles.tabTitle}>Reviews Management</Text>
                         <FlatList
-                            data={reviews}
+                            data={filteredReviews}
                             renderItem={renderReviewItem}
                             keyExtractor={(item) => item.id}
                             showsVerticalScrollIndicator={false}
+                            refreshControl={
+                                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                            }
                         />
                     </View>
                 );
@@ -810,6 +845,9 @@ const AdminDashboard = () => {
                             renderItem={renderLocationItem}
                             keyExtractor={(item) => item.id}
                             showsVerticalScrollIndicator={false}
+                            refreshControl={
+                                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                            }
                             ListEmptyComponent={
                                 <Text style={styles.emptyState}>No locations found</Text>
                             }
@@ -840,7 +878,7 @@ const AdminDashboard = () => {
             {/* Search Bar */}
             {activeTab !== 'overview' && (
                 <View style={styles.searchContainer}>
-                    <TextInput
+                    <RNTextInput
                         style={styles.searchInput}
                         placeholder="Search..."
                         placeholderTextColor={'#4f4d57'}
@@ -893,21 +931,285 @@ const AdminDashboard = () => {
             >
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
-                        <Text style={styles.modalTitle}>Details</Text>
+                        <View style={styles.modalHeader}>
+                            <Text style={styles.modalTitle}>
+                                {selectedItem?.firstName ? '👤 User Details' : 
+                                 selectedItem?.userName ? '📋 Booking Details' :
+                                 selectedItem?.guideName ? '🗺️ Guide Details' :
+                                 selectedItem?.placeName ? '📍 Location Details' :
+                                 selectedItem?.status === 'pending' || selectedItem?.status === 'approved' ? '📝 Application Details' :
+                                 'Details'}
+                            </Text>
+                            <TouchableOpacity
+                                style={styles.modalCloseIcon}
+                                onPress={() => setModalVisible(false)}
+                            >
+                                <Text style={styles.modalCloseIconText}>✕</Text>
+                            </TouchableOpacity>
+                        </View>
+                        
                         {selectedItem && (
-                            <ScrollView style={styles.modalScroll}>
-                                {Object.entries(selectedItem).map(([key, value]) => (
-                                    <View key={key} style={styles.detailRow}>
-                                        <Text style={styles.detailKey}>{key}:</Text>
-                                        <Text style={styles.detailValue}>
-                                            {typeof value === 'object' && value !== null
-                                                ? JSON.stringify(value)
-                                                : String(value)}
-                                        </Text>
+                            <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+                                {/* User Details */}
+                                {selectedItem.firstName && (
+                                    <View style={styles.detailsContainer}>
+                                        <View style={styles.detailCard}>
+                                            <Text style={styles.detailCardTitle}>Personal Information</Text>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>👤 Full Name</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.firstName} {selectedItem.lastName}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>📧 Email</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.email}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>🎯 Service</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.service || 'N/A'}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>📍 Location</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.location || 'N/A'}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>👥 User Type</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.userType || 'user'}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>📅 Joined</Text>
+                                                <Text style={styles.detailValue}>
+                                                    {selectedItem.createdAt ? new Date(selectedItem.createdAt.seconds * 1000).toLocaleString() : 'Unknown'}
+                                                </Text>
+                                            </View>
+                                        </View>
                                     </View>
-                                ))}
+                                )}
+
+                                {/* Guide Details */}
+                                {selectedItem.name && !selectedItem.firstName && !selectedItem.userName && (
+                                    <View style={styles.detailsContainer}>
+                                        <View style={styles.detailCard}>
+                                            <Text style={styles.detailCardTitle}>Guide Information</Text>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>👤 Name</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.name}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>📍 Location</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.location}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>⭐ Rating</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.rating} / 5</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>📝 Reviews</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.reviews || 0} reviews</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>💰 Price</Text>
+                                                <Text style={styles.detailValue}>৳{selectedItem.price || selectedItem.pricePerDay}/day</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>🎓 Experience</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.experience} years</Text>
+                                            </View>
+                                            {selectedItem.languages && (
+                                                <View style={styles.detailRow}>
+                                                    <Text style={styles.detailLabel}>🌐 Languages</Text>
+                                                    <Text style={styles.detailValue}>{selectedItem.languages}</Text>
+                                                </View>
+                                            )}
+                                            {selectedItem.specialties && (
+                                                <View style={styles.detailRow}>
+                                                    <Text style={styles.detailLabel}>⭐ Specialties</Text>
+                                                    <Text style={styles.detailValue}>{selectedItem.specialties}</Text>
+                                                </View>
+                                            )}
+                                            {selectedItem.bio && (
+                                                <View style={styles.detailRow}>
+                                                    <Text style={styles.detailLabel}>📄 Bio</Text>
+                                                    <Text style={styles.detailValue}>{selectedItem.bio}</Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                    </View>
+                                )}
+
+                                {/* Booking Details */}
+                                {selectedItem.userName && selectedItem.guideName && (
+                                    <View style={styles.detailsContainer}>
+                                        <View style={styles.detailCard}>
+                                            <Text style={styles.detailCardTitle}>Booking Information</Text>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>👤 User</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.userName}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>🗺️ Guide</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.guideName}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>📍 Location</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.guideLocation}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>📅 Date</Text>
+                                                <Text style={styles.detailValue}>
+                                                    {Array.isArray(selectedItem.dates) ? selectedItem.dates.join(', ') : selectedItem.date}
+                                                </Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>👥 Guests</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.guests || 'N/A'}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>💰 Price</Text>
+                                                <Text style={styles.detailValue}>৳{selectedItem.price}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>📊 Status</Text>
+                                                <View style={styles.statusBadge}>
+                                                    <Text style={[styles.statusBadgeText, {
+                                                        backgroundColor: selectedItem.status === 'confirmed' ? '#4CAF50' :
+                                                                       selectedItem.status === 'pending' ? '#FF9800' : '#F44336'
+                                                    }]}>
+                                                        {selectedItem.status?.toUpperCase()}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                            {selectedItem.message && (
+                                                <View style={styles.detailRow}>
+                                                    <Text style={styles.detailLabel}>💬 Message</Text>
+                                                    <Text style={styles.detailValue}>{selectedItem.message}</Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                    </View>
+                                )}
+
+                                {/* Application Details */}
+                                {(selectedItem.status === 'pending' || selectedItem.status === 'approved') && selectedItem.email && !selectedItem.userName && (
+                                    <View style={styles.detailsContainer}>
+                                        <View style={styles.detailCard}>
+                                            <Text style={styles.detailCardTitle}>Application Information</Text>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>👤 Name</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.name}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>📧 Email</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.email}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>✉️ Email Verified</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.emailVerified ? '✅ Yes' : '❌ No'}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>📍 Location</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.location}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>🎓 Experience</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.experience} years</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>💰 Price Per Day</Text>
+                                                <Text style={styles.detailValue}>৳{selectedItem.pricePerDay}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>🌐 Languages</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.languages}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>⭐ Specialties</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.specialties}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>📄 Bio</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.bio}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>📊 Status</Text>
+                                                <View style={styles.statusBadge}>
+                                                    <Text style={[styles.statusBadgeText, {
+                                                        backgroundColor: selectedItem.status === 'approved' ? '#4CAF50' : '#FF9800'
+                                                    }]}>
+                                                        {selectedItem.status?.toUpperCase()}
+                                                    </Text>
+                                                </View>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>📅 Applied</Text>
+                                                <Text style={styles.detailValue}>
+                                                    {selectedItem.createdAt ? new Date(selectedItem.createdAt.seconds * 1000).toLocaleString() : 'Unknown'}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    </View>
+                                )}
+
+                                {/* Location Details */}
+                                {selectedItem.placeName && selectedItem.category && (
+                                    <View style={styles.detailsContainer}>
+                                        <View style={styles.detailCard}>
+                                            <Text style={styles.detailCardTitle}>Location Information</Text>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>📍 Place Name</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.placeName}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>🏷️ Name</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.name}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>📂 Category</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.category}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>📝 Description</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.description}</Text>
+                                            </View>
+                                            {selectedItem.attractions && (
+                                                <View style={styles.detailRow}>
+                                                    <Text style={styles.detailLabel}>⭐ Attractions</Text>
+                                                    <Text style={styles.detailValue}>
+                                                        {Array.isArray(selectedItem.attractions) 
+                                                            ? selectedItem.attractions.join(', ') 
+                                                            : selectedItem.attractions}
+                                                    </Text>
+                                                </View>
+                                            )}
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>📅 Best Time</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.bestTimeToVisit}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>🌡️ Temperature</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.averageTemperature}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>🌐 Language</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.language}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>💰 Currency</Text>
+                                                <Text style={styles.detailValue}>{selectedItem.currency}</Text>
+                                            </View>
+                                            {selectedItem.isDefault !== undefined && (
+                                                <View style={styles.detailRow}>
+                                                    <Text style={styles.detailLabel}>🏷️ Type</Text>
+                                                    <Text style={styles.detailValue}>
+                                                        {selectedItem.isDefault ? 'Default Location' : 'Admin Added'}
+                                                    </Text>
+                                                </View>
+                                            )}
+                                        </View>
+                                    </View>
+                                )}
                             </ScrollView>
                         )}
+                        
                         <TouchableOpacity
                             style={styles.modalCloseButton}
                             onPress={() => setModalVisible(false)}
@@ -930,76 +1232,86 @@ const AdminDashboard = () => {
                         <Text style={styles.modalTitle}>Add New Location</Text>
                         <ScrollView style={styles.locationFormScroll}>
                             <TextInput
-                                style={styles.locationInput}
-                                placeholder="Place Name (e.g., Cox's Bazar Sea Beach)"
-                                placeholderTextColor={'#4f4d57'}
-                                value={locationForm.name}
-                                onChangeText={(text) => setLocationForm({...locationForm, placeName: text})}
-                            />
-                            <TextInput
-                                style={styles.locationInput}
-                                placeholder="Location Name *"
-                                placeholderTextColor={'#4f4d57'}
+                                label="Place Name (e.g., Cox's Bazar Sea Beach)"
                                 value={locationForm.placeName}
-                                onChangeText={(text) => setLocationForm({...locationForm, name: text})}
+                                onChangeText={(text) => setLocationForm({...locationForm, placeName: text})}
+                                style={styles.locationInput}
+                                mode="outlined"
+                                left={<TextInput.Icon icon="map-marker" />}
                             />
                             <TextInput
+                                label="Location Name *"
+                                value={locationForm.name}
+                                onChangeText={(text) => setLocationForm({...locationForm, name: text})}
                                 style={styles.locationInput}
-                                placeholder="Category (e.g., Historical, Beach, Mountain)"
-                                placeholderTextColor={'#4f4d57'}
+                                mode="outlined"
+                                left={<TextInput.Icon icon="office-building-marker" />}
+                            />
+                            <TextInput
+                                label="Category (e.g., Historical, Beach, Mountain)"
                                 value={locationForm.category}
                                 onChangeText={(text) => setLocationForm({...locationForm, category: text})}
+                                style={styles.locationInput}
+                                mode="outlined"
+                                left={<TextInput.Icon icon="tag" />}
                             />
                             <TextInput
-                                style={[styles.locationInput, styles.textArea]}
-                                placeholder="Description"
-                                placeholderTextColor={'#4f4d57'}
+                                label="Description"
                                 value={locationForm.description}
                                 onChangeText={(text) => setLocationForm({...locationForm, description: text})}
+                                style={styles.locationInput}
+                                mode="outlined"
                                 multiline
                                 numberOfLines={3}
+                                left={<TextInput.Icon icon="text" />}
                             />
                             <TextInput
-                                style={styles.locationInput}
-                                placeholder="Main Attractions"
-                                placeholderTextColor={'#4f4d57'}
+                                label="Main Attractions"
                                 value={locationForm.attractions}
                                 onChangeText={(text) => setLocationForm({...locationForm, attractions: text})}
+                                style={styles.locationInput}
+                                mode="outlined"
+                                left={<TextInput.Icon icon="star" />}
                             />
                             <TextInput
-                                style={styles.locationInput}
-                                placeholder="Best Time to Visit"
-                                placeholderTextColor={'#4f4d57'}
+                                label="Best Time to Visit"
                                 value={locationForm.bestTimeToVisit}
                                 onChangeText={(text) => setLocationForm({...locationForm, bestTimeToVisit: text})}
+                                style={styles.locationInput}
+                                mode="outlined"
+                                left={<TextInput.Icon icon="calendar" />}
                             />
                             <TextInput
-                                style={styles.locationInput}
-                                placeholder="Average Temperature"
-                                placeholderTextColor={'#4f4d57'}
+                                label="Average Temperature"
                                 value={locationForm.averageTemperature}
                                 onChangeText={(text) => setLocationForm({...locationForm, averageTemperature: text})}
+                                style={styles.locationInput}
+                                mode="outlined"
+                                left={<TextInput.Icon icon="thermometer" />}
                             />
                             <TextInput
-                                style={styles.locationInput}
-                                placeholder="Local Language"
-                                placeholderTextColor={'#4f4d57'}
+                                label="Local Language"
                                 value={locationForm.language}
                                 onChangeText={(text) => setLocationForm({...locationForm, language: text})}
+                                style={styles.locationInput}
+                                mode="outlined"
+                                left={<TextInput.Icon icon="translate" />}
                             />
                             <TextInput
-                                style={styles.locationInput}
-                                placeholder="Currency"
-                                placeholderTextColor={'#4f4d57'}
+                                label="Currency"
                                 value={locationForm.currency}
                                 onChangeText={(text) => setLocationForm({...locationForm, currency: text})}
+                                style={styles.locationInput}
+                                mode="outlined"
+                                left={<TextInput.Icon icon="currency-usd" />}
                             />
                             <TextInput
-                                style={styles.locationInput}
-                                placeholder="Image URL"
-                                placeholderTextColor={'#4f4d57'}
+                                label="Image URL"
                                 value={locationForm.image}
                                 onChangeText={(text) => setLocationForm({...locationForm, image: text})}
+                                style={styles.locationInput}
+                                mode="outlined"
+                                left={<TextInput.Icon icon="image" />}
                             />
                         </ScrollView>
                         <View style={styles.locationModalActions}>
@@ -1242,45 +1554,103 @@ const styles = StyleSheet.create({
     modalContent: {
         backgroundColor: '#FFFFFF',
         borderRadius: 16,
-        padding: 20,
+        padding: 0,
         width: '90%',
         maxHeight: '80%',
+    },
+    modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: '#e0e0e0',
     },
     modalTitle: {
         fontSize: 20,
         fontWeight: 'bold',
         color: '#333',
-        marginBottom: 15,
-        textAlign: 'center',
+        flex: 1,
+    },
+    modalCloseIcon: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: '#f5f5f5',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalCloseIconText: {
+        fontSize: 18,
+        color: '#666',
+        fontWeight: 'bold',
     },
     modalScroll: {
-        maxHeight: 400,
+        maxHeight: 500,
+        padding: 20,
+    },
+    detailsContainer: {
+        marginBottom: 10,
+    },
+    detailCard: {
+        backgroundColor: '#f8f9fa',
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 12,
+    },
+    detailCardTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#6200EE',
+        marginBottom: 12,
+        paddingBottom: 8,
+        borderBottomWidth: 2,
+        borderBottomColor: '#6200EE',
     },
     detailRow: {
-        flexDirection: 'row',
-        paddingVertical: 8,
-        borderBottomWidth: 1,
-        borderBottomColor: '#f0f0f0',
+        marginBottom: 12,
+    },
+    detailLabel: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: '#666',
+        marginBottom: 4,
+    },
+    detailValue: {
+        fontSize: 15,
+        color: '#333',
+        lineHeight: 22,
+    },
+    statusBadge: {
+        marginTop: 4,
+    },
+    statusBadgeText: {
+        fontSize: 12,
+        fontWeight: 'bold',
+        color: '#FFFFFF',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 12,
+        alignSelf: 'flex-start',
+        overflow: 'hidden',
     },
     detailKey: {
         fontWeight: 'bold',
         color: '#333',
         width: 100,
     },
-    detailValue: {
-        flex: 1,
-        color: '#666',
-    },
     modalCloseButton: {
         backgroundColor: '#6200EE',
-        paddingVertical: 12,
-        borderRadius: 8,
-        marginTop: 15,
+        paddingVertical: 14,
+        borderRadius: 0,
+        borderBottomLeftRadius: 16,
+        borderBottomRightRadius: 16,
     },
     modalCloseText: {
         color: '#FFFFFF',
         fontWeight: 'bold',
         textAlign: 'center',
+        fontSize: 16,
     },
     emptyState: {
         fontSize: 16,

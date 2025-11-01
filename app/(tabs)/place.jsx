@@ -6,6 +6,7 @@ import {
     FlatList,
     Image,
     Modal,
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
@@ -24,6 +25,7 @@ const Place = () => {
     const [places, setPlaces] = useState([]);
     const [categories, setCategories] = useState(['All']);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
 
     // Fetch locations from Firebase and combine with default places
     const fetchLocations = useCallback(async () => {
@@ -86,6 +88,12 @@ const Place = () => {
             fetchLocations();
         }, [fetchLocations])
     );
+
+    const onRefresh = async () => {
+        setRefreshing(true);
+        await fetchLocations();
+        setRefreshing(false);
+    };
 
     const filteredPlaces = places.filter(place => {
         const matchesSearch = place.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -228,6 +236,9 @@ const Place = () => {
                             keyExtractor={(item) => item.id}
                             showsVerticalScrollIndicator={false}
                             contentContainerStyle={styles.placesList}
+                            refreshControl={
+                                <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                            }
                         />
                     ) : (
                         <View style={styles.noResultsContainer}>

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Image, Modal, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { auth, db } from '../(auth)/firebase';
+import { sendBookingRequestToGuide } from '../../utils/realtimeNotificationService';
 
 const Guide = () => {
     const params = useLocalSearchParams();
@@ -189,7 +190,15 @@ const Guide = () => {
             // Use userId if available (for approved guides), otherwise fall back to document ID
             const guideId = selectedGuide.userId || selectedGuide.id;
             
-            await addDoc(collection(db, 'bookings'), {
+            console.log('=== BOOKING CREATION DEBUG ===');
+            console.log('Selected Guide:', selectedGuide);
+            console.log('Guide ID (userId):', selectedGuide.userId);
+            console.log('Guide ID (doc id):', selectedGuide.id);
+            console.log('Final guideId used:', guideId);
+            console.log('Guide ID type:', typeof guideId);
+            console.log('=== END DEBUG ===');
+            
+            const bookingDocRef = await addDoc(collection(db, 'bookings'), {
                 userId: user.uid,
                 userName: user.displayName || user.email,
                 userEmail: user.email,
@@ -206,6 +215,28 @@ const Guide = () => {
                 // Store individual dates for easier querying
                 bookedDates: bookingForm.dates
             });
+
+            // Send notification to guide about new booking request
+            const bookingData = {
+                bookingId: bookingDocRef.id,
+                userName: user.displayName || user.email,
+                userEmail: user.email,
+                location: selectedGuide.location,
+                dates: bookingForm.dates,
+                guests: guestCount,
+                totalPrice: totalPrice,
+                message: bookingForm.message
+            };
+            
+            console.log('Attempting to send notification to guide:', guideId);
+            const notificationResult = await sendBookingRequestToGuide(guideId, bookingData);
+            
+            if (notificationResult.success) {
+                console.log('✅ Booking request notification sent successfully!');
+                console.log('Notification ID:', notificationResult.notificationId);
+            } else {
+                console.error('❌ Failed to send notification:', notificationResult.error);
+            }
 
             Alert.alert('Success', `Booking request sent successfully for ${bookingForm.dates.length} date(s)! The guide will review your request.`);
             handleCloseModal();

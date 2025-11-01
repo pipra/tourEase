@@ -8,6 +8,7 @@ import {
     FlatList,
     Image,
     Modal,
+    RefreshControl,
     SafeAreaView,
     ScrollView,
     StyleSheet,
@@ -18,6 +19,7 @@ import {
 } from 'react-native';
 import { auth, db } from '../(auth)/firebase';
 import { bookingStatusService } from '../../utils/bookingStatusService';
+import { deleteNotification, listenForUserNotifications } from '../../utils/realtimeNotificationService';
 
 export default function Profile() {
     const [userData, setUserData] = useState(null);
@@ -34,12 +36,16 @@ export default function Profile() {
     const [profileImageUrl, setProfileImageUrl] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [authChecked, setAuthChecked] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
     
     // Booking status notification states
     const [statusChangeModalVisible, setStatusChangeModalVisible] = useState(false);
     const [statusChanges, setStatusChanges] = useState([]);
     const [currentStatusChangeIndex, setCurrentStatusChangeIndex] = useState(0);
     const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+    
+    // User notifications from RTDB
+    const [userNotifications, setUserNotifications] = useState([]);
 
     // Check auth state first
     useEffect(() => {
@@ -114,6 +120,42 @@ export default function Profile() {
             }
         };
     }, [initialLoadComplete]);
+
+    // Set up notification listener for booking responses
+    useEffect(() => {
+        let unsubscribe;
+
+        const setupNotificationListener = async () => {
+            const currentUser = auth.currentUser;
+            if (!currentUser?.uid) return;
+
+            try {
+                // Listen for booking response notifications from guides
+                unsubscribe = listenForUserNotifications(currentUser.uid, (notifications) => {
+                    console.log('User notifications updated:', notifications.length);
+                    
+                    // Store notifications in state for display
+                    setUserNotifications(notifications);
+                    
+                    // Refresh bookings to show updated status
+                    fetchUserBookings();
+                });
+
+                console.log('User notification listener set up successfully');
+            } catch (error) {
+                console.error('Error setting up notification listener:', error);
+            }
+        };
+
+        setupNotificationListener();
+
+        // Cleanup on unmount
+        return () => {
+            if (unsubscribe) {
+                unsubscribe();
+            }
+        };
+    }, []);
 
     // Refresh data when the screen comes into focus (e.g., after booking a guide)
     useFocusEffect(
@@ -255,6 +297,16 @@ export default function Profile() {
                 // console.log("Error fetching reviews:", _err.message);
             }
         }
+    };
+
+    const onRefresh = async () => {
+        setRefreshing(true);
+        await Promise.all([
+            fetchUserDetails(),
+            fetchUserBookings(),
+            fetchUserReviews()
+        ]);
+        setRefreshing(false);
     };
 
     // Filter bookings based on selected category
@@ -692,6 +744,9 @@ export default function Profile() {
                     <ScrollView 
                         showsVerticalScrollIndicator={false}
                         contentContainerStyle={styles.profileContent}
+                        refreshControl={
+                            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                        }
                     >
                         <View style={styles.profileCard}>
                             <View style={styles.profileImageContainer}>
@@ -836,6 +891,9 @@ export default function Profile() {
                                 keyExtractor={(item) => item.id}
                                 showsVerticalScrollIndicator={false}
                                 style={styles.bookingsList}
+                                refreshControl={
+                                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                                }
                             />
                         ) : (
                             <View style={styles.emptyState}>
@@ -854,6 +912,66 @@ export default function Profile() {
                         )}
                     </View>
                 );
+            case 'notifications':
+                return (
+                    <View style={styles.tabContent}>
+                        <Text style={styles.tabTitle}>My Notifications</Text>
+                        {userNotifications.length > 0 ? (
+                            <FlatList
+                                data={userNotifications}
+                                renderItem={({ item }) => (
+                                    <View style={styles.notificationCard}>
+                                        <View style={styles.notificationHeader}>
+                                            <Text style={styles.notificationTitle}>{item.title}</Text>
+                                            <TouchableOpacity
+                                                onPress={async () => {
+                                                    await deleteNotification(item.id, 'user');
+                                                }}
+                                                style={styles.deleteButton}
+                                            >
+                                                <MaterialIcons name="close" size={20} color="#666" />
+                                            </TouchableOpacity>
+                                        </View>
+                                        <Text style={styles.notificationMessage}>{item.message}</Text>
+                                        {item.data && (
+                                            <View style={styles.notificationDetails}>
+                                                <Text style={styles.notificationDetailText}>
+                                                    📍 {item.data.location}
+                                                </Text>
+                                                <Text style={styles.notificationDetailText}>
+                                                    📅 {item.data.dates}
+                                                </Text>
+                                                <Text style={styles.notificationDetailText}>
+                                                    💰 ৳{item.data.totalPrice}
+                                                </Text>
+                                            </View>
+                                        )}
+                                        <Text style={styles.notificationTime}>
+                                            {new Date(item.timestamp).toLocaleString('en-US', {
+                                                month: 'short',
+                                                day: 'numeric',
+                                                hour: '2-digit',
+                                                minute: '2-digit'
+                                            })}
+                                        </Text>
+                                    </View>
+                                )}
+                                keyExtractor={(item) => item.id}
+                                showsVerticalScrollIndicator={false}
+                                refreshControl={
+                                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                                }
+                            />
+                        ) : (
+                            <View style={styles.emptyState}>
+                                <Text style={styles.emptyStateText}>No notifications yet</Text>
+                                <Text style={styles.emptyStateSubtext}>
+                                    You&apos;ll receive updates about your bookings here
+                                </Text>
+                            </View>
+                        )}
+                    </View>
+                );
             case 'reviews':
                 return (
                     <View style={styles.tabContent}>
@@ -864,6 +982,9 @@ export default function Profile() {
                                 renderItem={renderReviewItem}
                                 keyExtractor={(item) => item.id}
                                 showsVerticalScrollIndicator={false}
+                                refreshControl={
+                                    <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                                }
                             />
                         ) : (
                             <View style={styles.emptyState}>
@@ -894,7 +1015,7 @@ export default function Profile() {
 
                     {/* Tab Navigation */}
                     <View style={styles.tabContainer}>
-                        {['profile', 'bookings', 'reviews'].map((tab) => (
+                        {['profile', 'bookings', 'notifications', 'reviews'].map((tab) => (
                             <TouchableOpacity
                                 key={tab}
                                 style={[
@@ -915,6 +1036,9 @@ export default function Profile() {
                                     activeTab === tab && styles.activeTabButtonText
                                 ]}>
                                     {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                    {tab === 'notifications' && userNotifications.length > 0 && (
+                                        <Text style={styles.notificationBadge}> ({userNotifications.length})</Text>
+                                    )}
                                 </Text>
                             </TouchableOpacity>
                         ))}
@@ -1902,5 +2026,61 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
         textAlign: 'center',
+    },
+    // Notification Styles
+    notificationCard: {
+        backgroundColor: 'white',
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 12,
+        borderLeftWidth: 4,
+        borderLeftColor: '#6200EE',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
+    },
+    notificationHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'flex-start',
+        marginBottom: 8,
+    },
+    notificationTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#333',
+        flex: 1,
+        marginRight: 8,
+    },
+    deleteButton: {
+        padding: 4,
+    },
+    notificationMessage: {
+        fontSize: 14,
+        color: '#666',
+        lineHeight: 20,
+        marginBottom: 12,
+    },
+    notificationDetails: {
+        backgroundColor: '#f8f9fa',
+        padding: 12,
+        borderRadius: 8,
+        marginBottom: 8,
+    },
+    notificationDetailText: {
+        fontSize: 13,
+        color: '#555',
+        marginBottom: 4,
+    },
+    notificationTime: {
+        fontSize: 12,
+        color: '#999',
+        marginTop: 4,
+    },
+    notificationBadge: {
+        color: '#6200EE',
+        fontWeight: 'bold',
     },
 });
